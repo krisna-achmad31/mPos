@@ -87,9 +87,11 @@ service cloud.firestore {
         allow read, write: if isOwner(d);
       }
 
-      // Harga khusus tersembunyi; customer hanya membaca promo publik.
+      // Harga khusus tersembunyi; customer hanya membaca promo yang tampil di katalog
+      // untuk semua pelanggan ('all') atau khusus dirinya.
       match /discounts/{id} {
-        allow read: if isOwner(d) || (member(d) && resource.data.visibleInCatalog == true);
+        allow read: if isOwner(d) || (member(d) && resource.data.visibleInCatalog == true
+          && resource.data.audience in ['all', request.auth.uid]);
         allow write: if isOwner(d);
       }
 

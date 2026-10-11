@@ -48,12 +48,17 @@ abstract final class PricingService {
     return best;
   }
 
-  /// Harga coret di katalog: hanya promo publik yang ditandai tampil.
-  static int? catalogPromoPrice(Product product, Iterable<Discount> discounts, DateTime now) {
-    final visible = discounts.where((d) => d.visibleInCatalog && d.kind == DiscountKind.promo && d.customerId == null);
+  /// Promo yang boleh terlihat oleh [customerId] di katalog: promo publik + promo khusus akun itu.
+  /// Harga khusus (special) tidak pernah tampil di katalog.
+  static Iterable<Discount> visiblePromosFor(Iterable<Discount> discounts, String? customerId) => discounts.where(
+      (d) => d.visibleInCatalog && d.kind == DiscountKind.promo && (d.customerId == null || d.customerId == customerId));
+
+  /// Harga coret di katalog untuk [customerId].
+  static int? catalogPromoPrice(Product product, Iterable<Discount> discounts, DateTime now, {String? customerId}) {
+    final visible = visiblePromosFor(discounts, customerId);
     final best = bestDiscount(
       productId: product.id,
-      customerId: null,
+      customerId: customerId,
       unitPrice: product.sellPrice,
       qty: 1,
       discounts: visible,

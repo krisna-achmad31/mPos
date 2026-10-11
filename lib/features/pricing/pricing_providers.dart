@@ -14,6 +14,7 @@ final discountsProvider = StreamProvider<List<Discount>>(
   (ref) => ref.watch(discountRepositoryProvider).watchAll(),
 );
 
+/// Promo yang terlihat oleh pelanggan yang login.
 final catalogPromosProvider = StreamProvider<List<Discount>>(
-  (ref) => ref.watch(discountRepositoryProvider).watchCatalogPromos(),
+  (ref) => ref.watch(discountRepositoryProvider).watchCatalogPromos(ref.watch(currentUserProvider).uid),
 );

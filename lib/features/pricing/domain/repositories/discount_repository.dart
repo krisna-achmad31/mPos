@@ -4,8 +4,8 @@ abstract interface class DiscountRepository {
   /// Semua diskon (hanya Owner).
   Stream<List<Discount>> watchAll();
 
-  /// Promo publik yang boleh terlihat Customer di katalog.
-  Stream<List<Discount>> watchCatalogPromos();
+  /// Promo yang boleh terlihat [customerId] di katalog (publik + khusus akun itu).
+  Stream<List<Discount>> watchCatalogPromos(String customerId);
 
   Future<void> save(Discount discount);
 

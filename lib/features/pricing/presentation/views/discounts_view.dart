@@ -56,7 +56,9 @@ class _DiscountTile extends ConsumerWidget {
     final period = d.start == null && d.end == null
         ? 'tanpa batas waktu'
         : '${d.start == null ? '…' : formatDate(d.start!)} – ${d.end == null ? '…' : formatDate(d.end!)}';
-    final visibility = d.visibleInCatalog ? 'tampil di katalog' : 'tersembunyi, muncul di invoice';
+    final visibility = d.visibleInCatalog
+        ? (d.customerId == null ? 'tampil di katalog semua pelanggan' : 'tampil di katalog ${d.customerName}')
+        : 'tersembunyi, muncul di invoice';
     return ListTile(
       leading: Icon(d.kind == DiscountKind.special ? Icons.person_pin_outlined : Icons.campaign_outlined),
       title: Text('${d.name} · ${d.valueLabel}'),

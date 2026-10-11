@@ -72,10 +72,12 @@ void main() {
     expect(promo(value: 50000, type: DiscountType.amount).amountFor(unitPrice: 20000, qty: 1), 20000);
   });
 
-  test('katalog hanya menampilkan promo publik yang ditandai tampil', () {
+  test('katalog: promo tampil hanya untuk pelanggan yang dituju', () {
     final p = product();
     expect(PricingService.catalogPromoPrice(p, [promo(visible: false)], now), isNull);
-    expect(PricingService.catalogPromoPrice(p, [promo(visible: true, customerId: 'c1')], now), isNull);
     expect(PricingService.catalogPromoPrice(p, [promo(visible: true)], now), 18000);
+    final forC1 = [promo(visible: true, customerId: 'c1')];
+    expect(PricingService.catalogPromoPrice(p, forC1, now, customerId: 'c1'), 18000);
+    expect(PricingService.catalogPromoPrice(p, forC1, now, customerId: 'c2'), isNull);
   });
 }

@@ -28,8 +28,13 @@ class CustomerCartState extends Equatable {
   List<Object?> get props => [lines, note, submission];
 }
 
-/// Keranjang Customer. Harga yang terlihat selalu harga normal (atau grosir otomatis).
+/// Keranjang Customer, terpisah per akun ([uid]). Harga di keranjang = harga normal / grosir;
+/// promo yang tampil di katalog hanya ditampilkan sebagai estimasi, dihitung final di invoice.
 class CustomerCartViewModel extends Notifier<CustomerCartState> {
+  CustomerCartViewModel(this.uid);
+
+  final String uid;
+
   @override
   CustomerCartState build() => const CustomerCartState();
 
@@ -69,5 +74,6 @@ class CustomerCartViewModel extends Notifier<CustomerCartState> {
   }
 }
 
+/// Satu keranjang per akun pelanggan: ganti akun = keranjang berbeda.
 final customerCartViewModelProvider =
-    NotifierProvider<CustomerCartViewModel, CustomerCartState>(CustomerCartViewModel.new);
+    NotifierProvider.family<CustomerCartViewModel, CustomerCartState, String>(CustomerCartViewModel.new);

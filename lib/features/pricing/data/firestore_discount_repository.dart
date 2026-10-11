@@ -38,8 +38,10 @@ class FirestoreDiscountRepository implements DiscountRepository {
         'productName': d.productName,
         'customerId': d.customerId,
         'customerName': d.customerName,
-        // Harga khusus tidak pernah tampil di katalog.
-        'visibleInCatalog': d.kind == DiscountKind.promo && d.customerId == null && d.visibleInCatalog,
+        // Harga khusus tidak pernah tampil di katalog. Promo boleh, untuk publik atau satu akun.
+        'visibleInCatalog': d.kind == DiscountKind.promo && d.visibleInCatalog,
+        // Siapa yang boleh membaca promo ini dari katalog: 'all' atau uid pelanggan.
+        'audience': d.customerId ?? 'all',
         'start': d.start == null ? null : Timestamp.fromDate(d.start!),
         'end': d.end == null ? null : Timestamp.fromDate(d.end!),
         'active': d.active,
@@ -54,8 +56,9 @@ class FirestoreDiscountRepository implements DiscountRepository {
       });
 
   @override
-  Stream<List<Discount>> watchCatalogPromos() => _col
+  Stream<List<Discount>> watchCatalogPromos(String customerId) => _col
       .where('visibleInCatalog', isEqualTo: true)
+      .where('audience', whereIn: ['all', customerId])
       .snapshots()
       .map((snap) => snap.docs.map((d) => _fromMap(d.id, d.data())).toList());
 

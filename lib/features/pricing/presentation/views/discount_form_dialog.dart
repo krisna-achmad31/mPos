@@ -92,7 +92,7 @@ class _DiscountFormDialogState extends ConsumerState<DiscountFormDialog> {
     final products = ref.watch(activeProductsProvider).value ?? [];
     final customers = ref.watch(customersProvider).value ?? [];
     final isPromo = _kind == DiscountKind.promo;
-    final canShowInCatalog = isPromo && _customerId == null;
+    final canShowInCatalog = isPromo;
 
     return AlertDialog(
       title: Text(widget.initial == null ? 'Diskon baru' : 'Ubah diskon'),
@@ -204,7 +204,9 @@ class _DiscountFormDialogState extends ConsumerState<DiscountFormDialog> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Tampilkan di katalog (harga coret)'),
-                  subtitle: const Text('Matikan agar promo hanya terlihat di invoice'),
+                  subtitle: Text(_customerId == null
+                      ? 'Semua pelanggan melihat harga coret. Matikan agar hanya terlihat di invoice.'
+                      : 'Hanya pelanggan terpilih yang melihat harga coret. Matikan agar hanya terlihat di invoice.'),
                   value: _visible,
                   onChanged: (v) => setState(() => _visible = v),
                 ),

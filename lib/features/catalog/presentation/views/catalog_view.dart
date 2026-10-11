@@ -7,6 +7,7 @@ import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/async_value_view.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
+import '../../../auth/auth_providers.dart';
 import '../../../pricing/domain/services/pricing_service.dart';
 import '../../../pricing/pricing_providers.dart';
 import '../../../products/domain/entities/product.dart';
@@ -21,7 +22,8 @@ class CatalogView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final query = ref.watch(productSearchProvider);
-    final cart = ref.watch(customerCartViewModelProvider);
+    final uid = ref.watch(currentUserProvider).uid;
+    final cart = ref.watch(customerCartViewModelProvider(uid));
     final promos = ref.watch(catalogPromosProvider).value ?? const [];
     final now = ref.watch(clockProvider)();
 
@@ -65,7 +67,7 @@ class CatalogView extends ConsumerWidget {
                   itemCount: products.length,
                   itemBuilder: (context, i) => _ProductCard(
                     product: products[i],
-                    promoPrice: PricingService.catalogPromoPrice(products[i], promos, now),
+                    promoPrice: PricingService.catalogPromoPrice(products[i], promos, now, customerId: uid),
                   ),
                 );
               },
@@ -128,7 +130,8 @@ class _ProductCard extends ConsumerWidget {
   }
 
   Future<void> _add(BuildContext context, WidgetRef ref) async {
-    final message = ref.read(customerCartViewModelProvider.notifier).add(product, 1);
+    final uid = ref.read(currentUserProvider).uid;
+    final message = ref.read(customerCartViewModelProvider(uid).notifier).add(product, 1);
     showMessage(context, message ?? '${product.name} masuk keranjang', isError: message != null);
   }
 }
