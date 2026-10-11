@@ -152,14 +152,17 @@ class TimeBarChart extends StatelessWidget {
           ),
           barGroups: [
             for (var i = 0; i < buckets.length; i++)
-              BarChartGroupData(x: i, barRods: [
-                BarChartRodData(
-                  toY: buckets[i].amount.toDouble(),
-                  color: scheme.primary,
-                  width: buckets.length > 20 ? 7 : 14,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
-                ),
-              ]),
+              BarChartGroupData(
+                x: i,
+                barRods: [
+                  BarChartRodData(
+                    toY: buckets[i].amount.toDouble(),
+                    color: scheme.primary,
+                    width: buckets.length > 20 ? 7 : 14,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+                  ),
+                ],
+              ),
           ],
         ),
       ),
@@ -248,19 +251,21 @@ class DonutChart extends StatelessWidget {
         SizedBox(
           width: 140,
           height: 140,
-          child: PieChart(PieChartData(
-            centerSpaceRadius: 36,
-            sectionsSpace: 2,
-            sections: [
-              for (var i = 0; i < items.length; i++)
-                PieChartSectionData(
-                  value: items[i].amount.toDouble(),
-                  color: colors[i % colors.length],
-                  radius: 30,
-                  showTitle: false,
-                ),
-            ],
-          )),
+          child: PieChart(
+            PieChartData(
+              centerSpaceRadius: 36,
+              sectionsSpace: 2,
+              sections: [
+                for (var i = 0; i < items.length; i++)
+                  PieChartSectionData(
+                    value: items[i].amount.toDouble(),
+                    color: colors[i % colors.length],
+                    radius: 30,
+                    showTitle: false,
+                  ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(width: 16),
         Expanded(

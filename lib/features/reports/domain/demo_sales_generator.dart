@@ -9,6 +9,15 @@ import '../../sales/domain/entities/cart_line.dart';
 import '../../sales/domain/entities/invoice.dart';
 import '../../sales/domain/services/sale_calculator.dart';
 
+/// Pola belanja pembeli pada data demo.
+enum BuyerProfile {
+  /// Toko eceran: keranjang kecil, banyak pembeli umum.
+  retail,
+
+  /// Distributor (mis. ke cafe): lebih sedikit nota, banyak item & qty, hampir selalu pelanggan tetap.
+  wholesale,
+}
+
 /// Membuat transaksi contoh untuk MODE DEMO laporan.
 ///
 /// Hasilnya tidak pernah disimpan sebagai nota asli: nomor berawalan `DEMO-`,
@@ -21,6 +30,9 @@ class DemoSalesGenerator {
 
   /// false (default): data demo tidak dibatasi stok asli, karena tidak pernah mengurangi stok.
   bool _respectStock = false;
+  BuyerProfile _profile = BuyerProfile.retail;
+
+  bool get _wholesale => _profile == BuyerProfile.wholesale;
 
   List<Invoice> generate({
     required DateTime date,
@@ -30,8 +42,10 @@ class DemoSalesGenerator {
     int openHour = 8,
     int closeHour = 21,
     bool respectStock = false,
+    BuyerProfile profile = BuyerProfile.retail,
   }) {
     _respectStock = respectStock;
+    _profile = profile;
     if (target <= 0) throw const AppException('Target total harus lebih dari 0.');
     if (closeHour <= openHour) throw const AppException('Jam tutup harus setelah jam buka.');
 
@@ -46,10 +60,10 @@ class DemoSalesGenerator {
     var remaining = target;
 
     for (var attempt = 0; attempt < 400; attempt++) {
-      final cheapest = eligible.where((p) => _available(p, usedQty) > 0).map((p) => p.sellPrice).fold<int?>(
-            null,
-            (m, v) => m == null || v < m ? v : m,
-          );
+      final cheapest = eligible
+          .where((p) => _available(p, usedQty) > 0)
+          .map((p) => p.sellPrice)
+          .fold<int?>(null, (m, v) => m == null || v < m ? v : m);
       if (cheapest == null || remaining < cheapest) break;
 
       final lines = _basket(eligible, popularity, usedQty, remaining);
@@ -64,7 +78,7 @@ class DemoSalesGenerator {
         at: _time(date, openHour, closeHour),
         lines: lines,
         method: _method(),
-        customer: customerNames.isNotEmpty && _rnd.nextDouble() < 0.25
+        customer: customerNames.isNotEmpty && _rnd.nextDouble() < (_wholesale ? 0.9 : 0.25)
             ? customerNames[_rnd.nextInt(customerNames.length)]
             : 'UMUM',
       ));
@@ -72,9 +86,7 @@ class DemoSalesGenerator {
 
     drafts.sort((a, b) => a.at.compareTo(b.at));
     final day = DateFormat('yyyyMMdd').format(date);
-    return [
-      for (var i = 0; i < drafts.length; i++) _invoice(drafts[i], day, i + 1),
-    ];
+    return [for (var i = 0; i < drafts.length; i++) _invoice(drafts[i], day, i + 1)];
   }
 
   // Produk tertentu lebih laku dari yang lain; barang murah lebih sering dibeli.
@@ -89,13 +101,10 @@ class DemoSalesGenerator {
   int _available(Product p, Map<String, int> used) =>
       _respectStock && p.trackStock ? p.stock - (used[p.id] ?? 0) : 1 << 20;
 
-  List<CartLine> _basket(
-    List<Product> products,
-    Map<String, double> popularity,
-    Map<String, int> used,
-    int budget,
-  ) {
-    final lineCount = _weighted({1: 45, 2: 30, 3: 15, 4: 7, 5: 3});
+  List<CartLine> _basket(List<Product> products, Map<String, double> popularity, Map<String, int> used, int budget) {
+    final lineCount = _wholesale
+        ? _weighted({2: 20, 3: 30, 4: 25, 5: 15, 6: 10})
+        : _weighted({1: 45, 2: 30, 3: 15, 4: 7, 5: 3});
     final lines = <CartLine>[];
     var spent = 0;
 
@@ -116,15 +125,17 @@ class DemoSalesGenerator {
       if (qty <= 0) continue;
 
       final (price, type) = PricingService.autoPrice(product, qty);
-      lines.add(CartLine(
-        productId: product.id,
-        name: product.name,
-        unit: product.unit,
-        qty: qty,
-        unitPrice: price,
-        priceType: type,
-        trackStock: product.trackStock,
-      ));
+      lines.add(
+        CartLine(
+          productId: product.id,
+          name: product.name,
+          unit: product.unit,
+          qty: qty,
+          unitPrice: price,
+          priceType: type,
+          trackStock: product.trackStock,
+        ),
+      );
       spent += price * qty;
     }
     return lines;
@@ -135,6 +146,12 @@ class DemoSalesGenerator {
   // Kebanyakan pembeli membeli 1–3; sesekali borongan (harga grosir bila ada).
   int _quantity(Product p) {
     final r = _rnd.nextDouble();
+    if (_wholesale) {
+      if (r < 0.35) return 1 + _rnd.nextInt(3);
+      if (r < 0.75) return 4 + _rnd.nextInt(5);
+      if (p.hasWholesale) return p.wholesaleMinQty + _rnd.nextInt(max(1, p.wholesaleMinQty));
+      return 10 + _rnd.nextInt(11);
+    }
     if (r < 0.55) return 1;
     if (r < 0.82) return 2 + _rnd.nextInt(2);
     if (r < 0.95) return 4 + _rnd.nextInt(3);

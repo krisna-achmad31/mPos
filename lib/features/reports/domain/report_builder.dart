@@ -16,15 +16,12 @@ abstract final class ReportBuilder {
     List<Product> products = const [],
     bool includeStock = true,
   }) {
-    final valid = invoices
-        .where((i) => !i.voided && !i.createdAt.isBefore(from) && i.createdAt.isBefore(to))
-        .toList()
+    final valid = invoices.where((i) => !i.voided && !i.createdAt.isBefore(from) && i.createdAt.isBefore(to)).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final productById = {for (final p in products) p.id: p};
 
     int lineCost(String productId, int qty) => (hppByProduct[productId] ?? 0) * qty;
-    int invoiceCost(Invoice i) =>
-        costByInvoice[i.id] ?? i.lines.fold(0, (s, l) => s + lineCost(l.productId, l.qty));
+    int invoiceCost(Invoice i) => costByInvoice[i.id] ?? i.lines.fold(0, (s, l) => s + lineCost(l.productId, l.qty));
 
     final productStats = <String, ProductStat>{};
     final category = <String, (int, int)>{};
@@ -63,11 +60,9 @@ abstract final class ReportBuilder {
     for (var d = from; d.isBefore(to); d = DateTime(d.year, d.month, d.day + 1)) {
       final next = DateTime(d.year, d.month, d.day + 1);
       final inDay = valid.where((i) => !i.createdAt.isBefore(d) && i.createdAt.isBefore(next));
-      days.add(TimeBucket(
-        start: d,
-        amount: inDay.fold(0, (s, i) => s + i.totals.total - i.totals.tax),
-        count: inDay.length,
-      ));
+      days.add(
+        TimeBucket(start: d, amount: inDay.fold(0, (s, i) => s + i.totals.total - i.totals.tax), count: inDay.length),
+      );
     }
     final hours = List.generate(24, (h) {
       final inHour = valid.where((i) => i.createdAt.hour == h);
@@ -114,8 +109,8 @@ abstract final class ReportBuilder {
       expensesByCategory: sorted(expenseCategory),
       inventoryValue: includeStock
           ? products
-              .where((p) => p.trackStock && p.stock > 0)
-              .fold(0, (s, p) => s + p.stock * (hppByProduct[p.id] ?? 0))
+                .where((p) => p.trackStock && p.stock > 0)
+                .fold(0, (s, p) => s + p.stock * (hppByProduct[p.id] ?? 0))
           : 0,
       reorder: includeStock ? products.where((p) => p.active && p.needsReorder).toList() : const [],
     );

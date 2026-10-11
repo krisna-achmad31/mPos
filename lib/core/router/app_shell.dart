@@ -50,10 +50,10 @@ Widget? shellMenuButton(BuildContext context) => MediaQuery.sizeOf(context).widt
     : IconButton(icon: const Icon(Icons.menu), onPressed: () => shellScaffoldKey.currentState?.openDrawer());
 
 List<NavItem> navFor(UserRole role) => switch (role) {
-      UserRole.owner => ownerNav,
-      UserRole.spv => spvNav,
-      UserRole.customer => customerNav,
-    };
+  UserRole.owner => ownerNav,
+  UserRole.spv => spvNav,
+  UserRole.customer => customerNav,
+};
 
 /// Kerangka navigasi: menu samping permanen di layar lebar, drawer di HP.
 class AppShell extends ConsumerWidget {
@@ -75,39 +75,49 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final items = navFor(user.role);
-    final selected = _selected(items, GoRouter.of(context).routerDelegate.currentConfiguration.uri.path);
     final wide = MediaQuery.sizeOf(context).width >= 1000;
+    // Dengarkan alamat dari router langsung: ikut berubah juga saat URL diketik / dibuka dari tautan.
+    final routeInfo = GoRouter.of(context).routeInformationProvider;
 
-    final drawer = NavigationDrawer(
-      selectedIndex: selected,
-      onDestinationSelected: (i) {
-        if (!wide) shellScaffoldKey.currentState?.closeDrawer();
-        context.go(items[i].path);
-      },
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 20, 16, 4),
-          child: Text(user.displayName, style: Theme.of(context).textTheme.titleMedium),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 0, 16, 12),
-          child: Text(user.role.label, style: Theme.of(context).textTheme.bodySmall),
-        ),
-        for (final item in items) NavigationDrawerDestination(icon: Icon(item.icon), label: Text(item.label)),
-        const Divider(indent: 28, endIndent: 28),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: ListTile(
-            leading: Icon(AppConfig.demoMode ? Icons.swap_horiz : Icons.logout),
-            title: Text(AppConfig.demoMode ? 'Ganti role' : 'Keluar'),
-            onTap: () => ref.read(authViewModelProvider.notifier).signOut(),
+    final drawer = ListenableBuilder(
+      listenable: routeInfo,
+      builder: (context, _) => NavigationDrawer(
+        selectedIndex: _selected(items, routeInfo.value.uri.path),
+        onDestinationSelected: (i) {
+          if (!wide) shellScaffoldKey.currentState?.closeDrawer();
+          context.go(items[i].path);
+        },
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 20, 16, 4),
+            child: Text(user.displayName, style: Theme.of(context).textTheme.titleMedium),
           ),
-        ),
-      ],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 0, 16, 12),
+            child: Text(user.role.label, style: Theme.of(context).textTheme.bodySmall),
+          ),
+          for (final item in items) NavigationDrawerDestination(icon: Icon(item.icon), label: Text(item.label)),
+          const Divider(indent: 28, endIndent: 28),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: ListTile(
+              leading: Icon(AppConfig.demoMode ? Icons.swap_horiz : Icons.logout),
+              title: Text(AppConfig.demoMode ? 'Ganti role' : 'Keluar'),
+              onTap: () => ref.read(authViewModelProvider.notifier).signOut(),
+            ),
+          ),
+        ],
+      ),
     );
 
     if (wide) {
-      return Row(children: [SizedBox(width: 280, child: drawer), const VerticalDivider(width: 1), Expanded(child: child)]);
+      return Row(
+        children: [
+          SizedBox(width: 280, child: drawer),
+          const VerticalDivider(width: 1),
+          Expanded(child: child),
+        ],
+      );
     }
     return Scaffold(key: shellScaffoldKey, drawer: drawer, body: child);
   }

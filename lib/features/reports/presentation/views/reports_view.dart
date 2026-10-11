@@ -9,6 +9,8 @@ import '../../../../core/utils/dates.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/async_value_view.dart';
 import '../../../../core/widgets/feedback.dart';
+import '../../../sales/domain/entities/invoice.dart';
+import '../../data/demo_report_repository.dart';
 import '../../domain/sales_report.dart';
 import '../viewmodels/report_view_model.dart';
 import '../widgets/report_widgets.dart';
@@ -101,16 +103,15 @@ class _DemoBanner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final filter = ref.watch(reportFilterProvider);
-    final hasDay = ref.watch(demoDayKeysProvider).value?.contains(DateFormat('yyyyMMdd').format(filter.date)) ?? false;
+    final day = ref.watch(demoDaysProvider).value?[DemoReportRepository.keyOf(filter.date)];
+    final hasDay = day != null && filter.period == ReportPeriod.day;
+    final used = ref.watch(salesReportProvider).value?.invoices.fold(0, (s, i) => s + i.totals.total) ?? 0;
     final busy = ref.watch(demoDataViewModelProvider).isLoading;
 
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: scheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: scheme.tertiaryContainer, borderRadius: BorderRadius.circular(12)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: 8,
@@ -128,8 +129,17 @@ class _DemoBanner extends ConsumerWidget {
               ),
             ],
           ),
+          if (hasDay)
+            Text(
+              'Target ${formatRupiah(day.target)} · terpakai ${formatRupiah(used)} · '
+              'sisa ${formatRupiah(day.target - used)} · '
+              '${day.useDemoCatalog ? 'katalog demo distributor cafe' : 'produk asli'}. '
+              'Ketuk ikon pensil di daftar transaksi untuk mengubah jam atau qty.',
+              style: TextStyle(color: scheme.onTertiaryContainer),
+            ),
           Wrap(
             spacing: 8,
+            runSpacing: 8,
             children: [
               FilledButton.icon(
                 onPressed: busy ? null : () => _DemoGeneratorDialog.show(context, filter.date),
@@ -141,9 +151,11 @@ class _DemoBanner extends ConsumerWidget {
                   onPressed: busy
                       ? null
                       : () async {
-                          final ok = await confirm(context,
-                              title: 'Hapus data demo',
-                              message: 'Hapus data demo tanggal ${formatDate(filter.date)}?');
+                          final ok = await confirm(
+                            context,
+                            title: 'Hapus data demo',
+                            message: 'Hapus data demo tanggal ${formatDate(filter.date)}?',
+                          );
                           if (ok) await ref.read(demoDataViewModelProvider.notifier).deleteDay(filter.date);
                         },
                   icon: const Icon(Icons.delete_outline),
@@ -162,16 +174,19 @@ class _DemoGeneratorDialog extends ConsumerStatefulWidget {
 
   final DateTime initialDate;
 
-  static Future<void> show(BuildContext context, DateTime date) =>
-      showDialog(context: context, builder: (_) => _DemoGeneratorDialog(initialDate: date));
+  static Future<void> show(BuildContext context, DateTime date) => showDialog(
+    context: context,
+    builder: (_) => _DemoGeneratorDialog(initialDate: date),
+  );
 
   @override
   ConsumerState<_DemoGeneratorDialog> createState() => _DemoGeneratorDialogState();
 }
 
 class _DemoGeneratorDialogState extends ConsumerState<_DemoGeneratorDialog> {
-  final _target = TextEditingController(text: '1000000');
+  final _target = TextEditingController();
   late DateTime _date = widget.initialDate;
+  bool _useDemoCatalog = true;
   int _open = 8;
   int _close = 21;
   String? _error;
@@ -183,12 +198,14 @@ class _DemoGeneratorDialogState extends ConsumerState<_DemoGeneratorDialog> {
   }
 
   Future<void> _generate() async {
-    final ok = await ref.read(demoDataViewModelProvider.notifier).generate(
-          date: _date,
-          target: parseRupiah(_target.text),
-          openHour: _open,
-          closeHour: _close,
-        );
+    final target = parseRupiah(_target.text);
+    if (target <= 0) {
+      setState(() => _error = 'Isi target total hari itu.');
+      return;
+    }
+    final ok = await ref
+        .read(demoDataViewModelProvider.notifier)
+        .generate(date: _date, target: target, openHour: _open, closeHour: _close, useDemoCatalog: _useDemoCatalog);
     if (!mounted) return;
     if (ok) {
       ref.read(reportFilterProvider.notifier)
@@ -216,8 +233,23 @@ class _DemoGeneratorDialogState extends ConsumerState<_DemoGeneratorDialog> {
           spacing: 12,
           children: [
             const Text(
-              'Transaksi contoh dibuat dari produk & harga yang ada: jumlah nota, qty, dan jam '
-              'pembelian dibuat bervariasi. Total hari itu tidak akan melebihi target.',
+              'Jumlah nota, qty, dan jam pembelian dibuat bervariasi. '
+              'Total hari itu tidak akan melebihi target yang Anda isi.',
+            ),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: true, label: Text('Katalog demo cafe'), icon: Icon(Icons.coffee_outlined)),
+                ButtonSegment(value: false, label: Text('Produk asli'), icon: Icon(Icons.inventory_2_outlined)),
+              ],
+              selected: {_useDemoCatalog},
+              onSelectionChanged: (v) => setState(() => _useDemoCatalog = v.first),
+            ),
+            Text(
+              _useDemoCatalog
+                  ? 'Contoh distributor ke cafe: biji kopi, susu, sirup, bubuk minuman, kemasan. '
+                        'Pelanggan contoh berupa cafe, pembelian grosir.'
+                  : 'Memakai produk & harga asli Anda (stok asli tidak berubah).',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
             OutlinedButton.icon(
               icon: const Icon(Icons.event),
@@ -236,7 +268,12 @@ class _DemoGeneratorDialogState extends ConsumerState<_DemoGeneratorDialog> {
               controller: _target,
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              decoration: const InputDecoration(labelText: 'Target total hari itu (Rp)', helperText: 'Maksimal, misalnya 1000000'),
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Target total hari itu (Rp)',
+                hintText: 'mis. 2500000',
+                helperText: 'Batas maksimal omzet demo hari itu',
+              ),
             ),
             Row(
               spacing: 12,
@@ -245,7 +282,10 @@ class _DemoGeneratorDialogState extends ConsumerState<_DemoGeneratorDialog> {
                   child: DropdownButtonFormField<int>(
                     initialValue: _open,
                     decoration: const InputDecoration(labelText: 'Jam buka'),
-                    items: [for (final h in hours.take(24)) DropdownMenuItem(value: h, child: Text('${h.toString().padLeft(2, '0')}.00'))],
+                    items: [
+                      for (final h in hours.take(24))
+                        DropdownMenuItem(value: h, child: Text('${h.toString().padLeft(2, '0')}.00')),
+                    ],
                     onChanged: (v) => setState(() => _open = v ?? _open),
                   ),
                 ),
@@ -253,7 +293,10 @@ class _DemoGeneratorDialogState extends ConsumerState<_DemoGeneratorDialog> {
                   child: DropdownButtonFormField<int>(
                     initialValue: _close,
                     decoration: const InputDecoration(labelText: 'Jam tutup'),
-                    items: [for (final h in hours.skip(1)) DropdownMenuItem(value: h, child: Text('${h.toString().padLeft(2, '0')}.00'))],
+                    items: [
+                      for (final h in hours.skip(1))
+                        DropdownMenuItem(value: h, child: Text('${h.toString().padLeft(2, '0')}.00')),
+                    ],
                     onChanged: (v) => setState(() => _close = v ?? _close),
                   ),
                 ),
@@ -305,7 +348,11 @@ class _ReportBody extends StatelessWidget {
           children: [
             KpiTile(label: 'Omzet bersih', value: formatRupiah(r.netSales), icon: Icons.payments_outlined),
             KpiTile(label: 'Jumlah nota', value: '${r.invoiceCount}', icon: Icons.receipt_long_outlined),
-            KpiTile(label: 'Rata-rata per nota', value: formatRupiah(r.averageTicket), icon: Icons.shopping_basket_outlined),
+            KpiTile(
+              label: 'Rata-rata per nota',
+              value: formatRupiah(r.averageTicket),
+              icon: Icons.shopping_basket_outlined,
+            ),
             KpiTile(label: 'Item terjual', value: formatNumber(r.itemsSold), icon: Icons.inventory_2_outlined),
             KpiTile(
               label: 'Laba kotor',
@@ -314,7 +361,12 @@ class _ReportBody extends StatelessWidget {
               icon: Icons.trending_up,
             ),
             if (!r.isDemo)
-              KpiTile(label: 'Laba bersih', value: formatRupiah(r.netProfit), hint: 'Setelah pengeluaran', icon: Icons.account_balance_outlined),
+              KpiTile(
+                label: 'Laba bersih',
+                value: formatRupiah(r.netProfit),
+                hint: 'Setelah pengeluaran',
+                icon: Icons.account_balance_outlined,
+              ),
             KpiTile(label: 'Diskon diberikan', value: formatRupiah(r.discounts), icon: Icons.local_offer_outlined),
             KpiTile(label: 'Belum dibayar', value: formatRupiah(r.receivables), icon: Icons.hourglass_bottom),
             if (busiest != null)
@@ -338,36 +390,66 @@ class _ReportBody extends StatelessWidget {
           subtitle: isDay ? 'Sebaran transaksi hari ini' : 'Gabungan seluruh hari di bulan ini',
           child: TimeBarChart(buckets: r.byHour, label: hourLabel),
         ),
-        LayoutBuilder(builder: (context, c) {
-          final wide = c.maxWidth >= 900;
-          final payment = SectionCard(title: 'Metode pembayaran', child: DonutChart(items: r.byPaymentMethod));
-          final source = SectionCard(title: 'Sumber penjualan', child: DonutChart(items: r.bySource));
-          return wide
-              ? Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 12, children: [
-                  Expanded(child: payment),
-                  Expanded(child: source),
-                ])
-              : Column(children: [payment, source]);
-        }),
+        LayoutBuilder(
+          builder: (context, c) {
+            final wide = c.maxWidth >= 900;
+            final payment = SectionCard(
+              title: 'Metode pembayaran',
+              child: DonutChart(items: r.byPaymentMethod),
+            );
+            final source = SectionCard(
+              title: 'Sumber penjualan',
+              child: DonutChart(items: r.bySource),
+            );
+            return wide
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 12,
+                    children: [
+                      Expanded(child: payment),
+                      Expanded(child: source),
+                    ],
+                  )
+                : Column(children: [payment, source]);
+          },
+        ),
         SectionCard(
           title: 'Produk terlaris',
           subtitle: '${r.products.length} produk terjual · urut omzet',
           child: _ProductTable(products: r.products),
         ),
-        LayoutBuilder(builder: (context, c) {
-          final wide = c.maxWidth >= 900;
-          final category = SectionCard(title: 'Penjualan per kategori', child: ProportionList(items: r.byCategory, showCount: false));
-          final customers = SectionCard(title: 'Pelanggan teratas', child: ProportionList(items: r.topCustomers));
-          return wide
-              ? Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 12, children: [
-                  Expanded(child: category),
-                  Expanded(child: customers),
-                ])
-              : Column(children: [category, customers]);
-        }),
-        SectionCard(title: 'Laba rugi', child: _ProfitLoss(report: r)),
+        LayoutBuilder(
+          builder: (context, c) {
+            final wide = c.maxWidth >= 900;
+            final category = SectionCard(
+              title: 'Penjualan per kategori',
+              child: ProportionList(items: r.byCategory, showCount: false),
+            );
+            final customers = SectionCard(
+              title: 'Pelanggan teratas',
+              child: ProportionList(items: r.topCustomers),
+            );
+            return wide
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 12,
+                    children: [
+                      Expanded(child: category),
+                      Expanded(child: customers),
+                    ],
+                  )
+                : Column(children: [category, customers]);
+          },
+        ),
+        SectionCard(
+          title: 'Laba rugi',
+          child: _ProfitLoss(report: r),
+        ),
         if (!r.isDemo && r.expensesByCategory.isNotEmpty)
-          SectionCard(title: 'Pengeluaran per kategori', child: ProportionList(items: r.expensesByCategory)),
+          SectionCard(
+            title: 'Pengeluaran per kategori',
+            child: ProportionList(items: r.expensesByCategory),
+          ),
         if (!r.isDemo)
           SectionCard(
             title: 'Stok',
@@ -377,8 +459,7 @@ class _ReportBody extends StatelessWidget {
               children: [
                 _row(context, 'Nilai persediaan (HPP × stok)', formatRupiah(r.inventoryValue), strong: true),
                 _row(context, 'Produk perlu order ulang', '${r.reorder.length}'),
-                for (final p in r.reorder.take(10))
-                  _row(context, '  ${p.name}', 'stok ${p.stock} / min ${p.minStock}'),
+                for (final p in r.reorder.take(10)) _row(context, '  ${p.name}', 'stok ${p.stock} / min ${p.minStock}'),
               ],
             ),
           ),
@@ -452,9 +533,17 @@ class _ProductTable extends StatelessWidget {
         Row(
           children: [
             Expanded(flex: 4, child: Text('Produk', style: text.labelMedium)),
-            Expanded(child: Text('Qty', textAlign: TextAlign.end, style: text.labelMedium)),
-            Expanded(flex: 2, child: Text('Omzet', textAlign: TextAlign.end, style: text.labelMedium)),
-            Expanded(flex: 2, child: Text('Laba', textAlign: TextAlign.end, style: text.labelMedium)),
+            Expanded(
+              child: Text('Qty', textAlign: TextAlign.end, style: text.labelMedium),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text('Omzet', textAlign: TextAlign.end, style: text.labelMedium),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text('Laba', textAlign: TextAlign.end, style: text.labelMedium),
+            ),
           ],
         ),
         const Divider(),
@@ -508,10 +597,25 @@ class _TransactionList extends StatelessWidget {
         for (final inv in report.invoices.take(100))
           ExpansionTile(
             tilePadding: EdgeInsets.zero,
-            title: Text('${showDate ? '${formatDate(inv.createdAt)} ' : ''}${timeOf(inv.createdAt)} · ${inv.customerName}'),
-            subtitle: Text('${inv.number} · ${inv.paymentMethod?.label ?? 'Pesanan online'} · '
-                '${inv.lines.fold(0, (s, l) => s + l.qty)} item'),
-            trailing: Text(formatRupiah(inv.totals.total), style: text.titleSmall),
+            title: Text(
+              '${showDate ? '${formatDate(inv.createdAt)} ' : ''}${timeOf(inv.createdAt)} · ${inv.customerName}',
+            ),
+            subtitle: Text(
+              '${inv.number} · ${inv.paymentMethod?.label ?? 'Pesanan online'} · '
+              '${inv.lines.fold(0, (s, l) => s + l.qty)} item',
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(formatRupiah(inv.totals.total), style: text.titleSmall),
+                if (report.isDemo)
+                  IconButton(
+                    tooltip: 'Ubah jam / qty',
+                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    onPressed: () => _DemoInvoiceEditDialog.show(context, inv),
+                  ),
+              ],
+            ),
             children: [
               for (final l in inv.lines)
                 _row(context, '${l.qty} × ${l.name} @${formatRupiah(l.unitPrice)}', formatRupiah(l.net)),
@@ -525,6 +629,132 @@ class _TransactionList extends StatelessWidget {
                 ),
             ],
           ),
+      ],
+    );
+  }
+}
+
+/// Edit satu nota demo: jam transaksi dan qty per barang.
+class _DemoInvoiceEditDialog extends ConsumerStatefulWidget {
+  const _DemoInvoiceEditDialog({required this.invoice});
+
+  final Invoice invoice;
+
+  static Future<void> show(BuildContext context, Invoice invoice) => showDialog(
+    context: context,
+    builder: (_) => _DemoInvoiceEditDialog(invoice: invoice),
+  );
+
+  @override
+  ConsumerState<_DemoInvoiceEditDialog> createState() => _DemoInvoiceEditDialogState();
+}
+
+class _DemoInvoiceEditDialogState extends ConsumerState<_DemoInvoiceEditDialog> {
+  late TimeOfDay _time = TimeOfDay.fromDateTime(widget.invoice.createdAt);
+  late final _qty = [for (final l in widget.invoice.lines) TextEditingController(text: '${l.qty}')];
+  String? _error;
+
+  @override
+  void dispose() {
+    for (final c in _qty) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  int get _previewTotal {
+    var total = 0;
+    for (var i = 0; i < widget.invoice.lines.length; i++) {
+      total += widget.invoice.lines[i].unitPrice * (int.tryParse(_qty[i].text) ?? 0);
+    }
+    return total;
+  }
+
+  Future<void> _save() async {
+    final d = widget.invoice.createdAt;
+    final ok = await ref
+        .read(demoDataViewModelProvider.notifier)
+        .editInvoice(
+          widget.invoice,
+          time: DateTime(d.year, d.month, d.day, _time.hour, _time.minute, d.second),
+          qtyByLine: [for (final c in _qty) int.tryParse(c.text) ?? 0],
+        );
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context);
+    } else {
+      setState(() => _error = '${ref.read(demoDataViewModelProvider).error}');
+    }
+  }
+
+  Future<void> _delete() async {
+    final ok = await confirm(context, title: 'Hapus nota demo', message: 'Hapus ${widget.invoice.number}?');
+    if (!ok || !mounted) return;
+    await ref.read(demoDataViewModelProvider.notifier).deleteInvoice(widget.invoice);
+    if (mounted) Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inv = widget.invoice;
+    final busy = ref.watch(demoDataViewModelProvider).isLoading;
+    return AlertDialog(
+      title: Text('Ubah ${inv.number}'),
+      content: SizedBox(
+        width: 460,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 12,
+            children: [
+              Text(inv.customerName),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.schedule),
+                label: Text('Jam ${_time.hour.toString().padLeft(2, '0')}:${_time.minute.toString().padLeft(2, '0')}'),
+                onPressed: () async {
+                  final picked = await showTimePicker(context: context, initialTime: _time);
+                  if (picked != null) setState(() => _time = picked);
+                },
+              ),
+              for (var i = 0; i < inv.lines.length; i++)
+                Row(
+                  spacing: 12,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${inv.lines[i].name}\n@${formatRupiah(inv.lines[i].unitPrice)} / ${inv.lines[i].unit}',
+                      ),
+                    ),
+                    SizedBox(
+                      width: 90,
+                      child: TextField(
+                        controller: _qty[i],
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: const InputDecoration(labelText: 'Qty'),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                  ],
+                ),
+              Text(
+                'Total nota: ${formatRupiah(_previewTotal)} (qty 0 = hapus barang)',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton.icon(
+          onPressed: busy ? null : _delete,
+          icon: const Icon(Icons.delete_outline),
+          label: const Text('Hapus nota'),
+        ),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+        FilledButton(onPressed: busy ? null : _save, child: const Text('Simpan')),
       ],
     );
   }
