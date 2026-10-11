@@ -26,8 +26,8 @@ class OrderActionsViewModel extends ActionViewModel {
     String? invoiceId;
     final ok = await run(() async {
       // Pastikan diskon & pajak sudah termuat, bukan nilai kosong saat loading.
-      await ref.read(discountsProvider.future);
-      final settings = await ref.read(storeSettingsProvider.future);
+      await readReady(discountsProvider.future);
+      final settings = await readReady(storeSettingsProvider.future);
       invoiceId = await ref.read(salesRepositoryProvider).processOrder(
             order: order,
             pricedLines: previewLines(order),

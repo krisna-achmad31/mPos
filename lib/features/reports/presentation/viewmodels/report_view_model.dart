@@ -134,8 +134,8 @@ class DemoDataViewModel extends ActionViewModel {
     required int closeHour,
   }) =>
       run(() async {
-        final products = await ref.read(activeProductsProvider.future);
-        final customers = (await ref.read(customersProvider.future)).map((c) => c.displayName).toList();
+        final products = await readReady(activeProductsProvider.future);
+        final customers = (await readReady(customersProvider.future)).map((c) => c.displayName).toList();
         final invoices = DemoSalesGenerator(seed: Random().nextInt(1 << 31)).generate(
           date: date,
           target: target,

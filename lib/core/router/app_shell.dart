@@ -62,7 +62,7 @@ class AppShell extends ConsumerWidget {
   final String location;
   final Widget child;
 
-  int _selected(List<NavItem> items) {
+  int _selected(List<NavItem> items, String location) {
     var best = 0;
     for (var i = 0; i < items.length; i++) {
       final p = items[i].path;
@@ -75,7 +75,7 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final items = navFor(user.role);
-    final selected = _selected(items);
+    final selected = _selected(items, GoRouter.of(context).routerDelegate.currentConfiguration.uri.path);
     final wide = MediaQuery.sizeOf(context).width >= 1000;
 
     final drawer = NavigationDrawer(
