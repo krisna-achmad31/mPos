@@ -1,0 +1,102 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../../domain/entities/stock_receipt.dart';
+
+class ReceiptEditResult {
+  const ReceiptEditResult(this.items, this.reason);
+
+  final List<StockReceiptItem> items;
+  final String reason;
+}
+
+/// Mengubah qty per baris dokumen stok masuk. SPV wajib memberi alasan.
+class ReceiptEditDialog extends StatefulWidget {
+  const ReceiptEditDialog({super.key, required this.receipt, required this.requireReason});
+
+  final StockReceipt receipt;
+  final bool requireReason;
+
+  static Future<ReceiptEditResult?> show(BuildContext context, StockReceipt receipt, {required bool requireReason}) =>
+      showDialog<ReceiptEditResult>(
+        context: context,
+        builder: (_) => ReceiptEditDialog(receipt: receipt, requireReason: requireReason),
+      );
+
+  @override
+  State<ReceiptEditDialog> createState() => _ReceiptEditDialogState();
+}
+
+class _ReceiptEditDialogState extends State<ReceiptEditDialog> {
+  late final _qty = [for (final i in widget.receipt.items) TextEditingController(text: '${i.qty}')];
+  final _reason = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    for (final c in _qty) {
+      c.dispose();
+    }
+    _reason.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (widget.requireReason && _reason.text.trim().isEmpty) {
+      setState(() => _error = 'Alasan wajib diisi');
+      return;
+    }
+    final items = <StockReceiptItem>[];
+    for (var i = 0; i < widget.receipt.items.length; i++) {
+      final qty = int.tryParse(_qty[i].text) ?? 0;
+      if (qty > 0) items.add(widget.receipt.items[i].copyWith(qty: qty));
+    }
+    Navigator.pop(context, ReceiptEditResult(items, _reason.text.trim()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.requireReason ? 'Ajukan perubahan' : 'Ubah stok masuk'),
+      content: SizedBox(
+        width: 420,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 12,
+            children: [
+              for (var i = 0; i < widget.receipt.items.length; i++)
+                Row(
+                  spacing: 12,
+                  children: [
+                    Expanded(child: Text(widget.receipt.items[i].productName)),
+                    SizedBox(
+                      width: 96,
+                      child: TextField(
+                        controller: _qty[i],
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: const InputDecoration(labelText: 'Qty', helperText: '0 = hapus'),
+                      ),
+                    ),
+                  ],
+                ),
+              if (widget.requireReason)
+                TextField(
+                  controller: _reason,
+                  maxLines: 2,
+                  decoration: InputDecoration(labelText: 'Alasan perubahan', errorText: _error),
+                ),
+              if (widget.requireReason)
+                const Text('Stok tidak berubah sampai Owner menyetujui pengajuan ini.'),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+        FilledButton(onPressed: _submit, child: Text(widget.requireReason ? 'Ajukan' : 'Simpan')),
+      ],
+    );
+  }
+}

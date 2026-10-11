@@ -1,0 +1,120 @@
+rules_version = '2';
+
+// Aturan akses per role: owner, spv, customer (field `role` di users/{uid}).
+// Catatan: stok diubah dari sisi klien di dalam transaksi. Untuk produksi,
+// pindahkan checkout & stok ke Cloud Functions agar customer tidak bisa
+// menulis field `stock` secara langsung.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function profile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function active() { return signedIn() && profile().active == true; }
+    function role() { return profile().role; }
+    function isOwner() { return active() && role() == 'owner'; }
+    function isSpv() { return active() && role() == 'spv'; }
+    function isCustomer() { return active() && role() == 'customer'; }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    match /users/{uid} {
+      allow read: if isSelf(uid) || isOwner();
+      // Pendaftaran mandiri selalu sebagai customer.
+      allow create: if isSelf(uid) && request.resource.data.role == 'customer';
+      allow update: if isOwner()
+        || (isSelf(uid) && onlyChanges(['name', 'storeName', 'phone', 'address']));
+    }
+
+    match /products/{id} {
+      allow read: if active();
+      allow create, delete: if isOwner();
+      // Stok berubah lewat transaksi stok masuk, checkout, dan pembatalan.
+      allow update: if isOwner()
+        || (active() && onlyChanges(['stock', 'updatedAt']) && request.resource.data.stock >= 0);
+    }
+
+    // Harga beli & HPP: tidak boleh terlihat customer.
+    match /product_costs/{id} {
+      allow read, write: if isOwner() || isSpv();
+    }
+
+    match /price_history/{id} {
+      allow read, write: if isOwner();
+    }
+
+    match /stock_receipts/{id} {
+      allow read: if isOwner() || (isSpv() && resource.data.createdBy == request.auth.uid);
+      allow create: if (isOwner() || isSpv()) && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isOwner()
+        || (isSpv() && resource.data.createdBy == request.auth.uid
+            && onlyChanges(['status']) && request.resource.data.status == 'pending_change');
+    }
+
+    match /change_requests/{id} {
+      allow read: if isOwner() || (isSpv() && resource.data.requestedBy == request.auth.uid);
+      allow create: if isSpv() && request.resource.data.requestedBy == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if isOwner();
+    }
+
+    match /stock_movements/{id} {
+      allow read: if isOwner();
+      allow create: if active() && request.resource.data.userId == request.auth.uid;
+    }
+
+    match /stock_opnames/{id} {
+      allow read, write: if isOwner();
+    }
+
+    // Harga khusus tersembunyi; customer hanya bisa membaca promo publik.
+    match /discounts/{id} {
+      allow read: if isOwner() || (active() && resource.data.visibleInCatalog == true);
+      allow write: if isOwner();
+    }
+
+    match /orders/{id} {
+      allow read: if isOwner() || (isCustomer() && resource.data.customerId == request.auth.uid);
+      allow create: if isCustomer() && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.status == 'pending';
+      allow update: if isOwner()
+        || (isCustomer() && resource.data.customerId == request.auth.uid
+            && resource.data.status == 'pending'
+            && request.resource.data.status == 'cancelled'
+            && onlyChanges(['status', 'cancelReason', 'cancelledBy', 'cancelledAt']));
+    }
+
+    match /invoices/{id} {
+      allow read: if isOwner() || (isCustomer() && resource.data.customerId == request.auth.uid);
+      allow write: if isOwner();
+    }
+
+    match /invoice_costs/{id} {
+      allow read, write: if isOwner();
+    }
+
+    match /payments/{id} {
+      allow read: if isOwner() || (isCustomer() && resource.data.customerId == request.auth.uid);
+      allow create: if isOwner();
+    }
+
+    match /expenses/{id} {
+      allow read, write: if isOwner();
+    }
+
+    match /counters/{id} {
+      allow read, write: if isOwner();
+    }
+
+    match /settings/{id} {
+      allow read: if active();
+      allow write: if isOwner();
+    }
+
+    match /audit_logs/{id} {
+      allow read: if isOwner();
+      allow create: if active() && request.resource.data.userId == request.auth.uid;
+    }
+  }
+}
