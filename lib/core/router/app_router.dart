@@ -13,6 +13,7 @@ import '../../features/auth/presentation/views/role_picker_view.dart';
 import '../../features/auth/presentation/views/users_view.dart';
 import '../../features/catalog/presentation/views/cart_view.dart';
 import '../../features/catalog/presentation/views/catalog_view.dart';
+import '../../features/catalog/presentation/views/my_spending_view.dart';
 import '../../features/dashboard/dashboard_view.dart';
 import '../../features/expenses/presentation/expenses_view.dart';
 import '../../features/pricing/presentation/views/discounts_view.dart';
@@ -110,6 +111,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         page('/shop/orders/:id', (s) => OrderDetailView(orderId: s.pathParameters['id']!)),
         page('/shop/invoices', (_) => const InvoicesView()),
         page('/shop/invoices/:id', (s) => InvoiceView(invoiceId: s.pathParameters['id']!)),
+        page('/shop/spending', (_) => const MySpendingView()),
       ]),
     ],
   );

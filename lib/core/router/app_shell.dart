@@ -40,6 +40,7 @@ const customerNav = [
   NavItem('Keranjang', Icons.shopping_cart_outlined, '/shop/cart'),
   NavItem('Pesanan saya', Icons.inbox_outlined, '/shop/orders'),
   NavItem('Nota saya', Icons.receipt_long_outlined, '/shop/invoices'),
+  NavItem('Belanja saya', Icons.insights_outlined, '/shop/spending'),
 ];
 
 final shellScaffoldKey = GlobalKey<ScaffoldState>();
