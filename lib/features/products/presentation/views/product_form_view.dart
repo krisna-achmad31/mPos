@@ -47,7 +47,19 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   late final _name = TextEditingController(text: widget.product?.name);
   late final _sku = TextEditingController(text: widget.product?.sku);
   late final _barcode = TextEditingController(text: widget.product?.barcode);
-  late final _category = TextEditingController(text: widget.product?.category);
+  late String? _category = (widget.product?.category ?? '').isEmpty ? null : widget.product!.category;
+
+  // Harga per kemasan: karton / ball / pouch (isi dalam satuan dasar + harga per kemasan).
+  late final _packContents = {
+    for (final name in ProductPack.presetNames)
+      name: TextEditingController(text: _num(_existingPack(name)?.contents)),
+  };
+  late final _packPrice = {
+    for (final name in ProductPack.presetNames) name: TextEditingController(text: _num(_existingPack(name)?.price)),
+  };
+
+  ProductPack? _existingPack(String name) =>
+      widget.product?.packs.where((p) => p.name.toLowerCase() == name).firstOrNull;
   late final _unit = TextEditingController(text: widget.product?.unit ?? 'pcs');
   late final _buyPrice = TextEditingController(text: _num(widget.cost?.buyPrice));
   late final _sellPrice = TextEditingController(text: _num(widget.product?.sellPrice));
@@ -61,7 +73,10 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
 
   @override
   void dispose() {
-    for (final c in [_name, _sku, _barcode, _category, _unit, _buyPrice, _sellPrice, _wholesalePrice, _wholesaleMin, _minStock]) {
+    for (final c in [
+      _name, _sku, _barcode, _unit, _buyPrice, _sellPrice, _wholesalePrice, _wholesaleMin, _minStock,
+      ..._packContents.values, ..._packPrice.values,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -74,7 +89,16 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       name: _name.text.trim(),
       sku: _sku.text.trim(),
       barcode: _barcode.text.trim(),
-      category: _category.text.trim(),
+      category: _category ?? '',
+      packs: [
+        for (final name in ProductPack.presetNames)
+          if (parseRupiah(_packContents[name]!.text) > 1 && parseRupiah(_packPrice[name]!.text) > 0)
+            ProductPack(
+              name: name,
+              contents: parseRupiah(_packContents[name]!.text),
+              price: parseRupiah(_packPrice[name]!.text),
+            ),
+      ],
       unit: _unit.text.trim().isEmpty ? 'pcs' : _unit.text.trim(),
       sellPrice: parseRupiah(_sellPrice.text),
       wholesalePrice: parseRupiah(_wholesalePrice.text),
@@ -132,8 +156,8 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                       Expanded(child: field(_barcode, 'Barcode')),
                     ]),
                     Row(spacing: 12, children: [
-                      Expanded(child: field(_category, 'Kategori')),
-                      Expanded(child: field(_unit, 'Satuan')),
+                      Expanded(child: _CategoryField(value: _category, onChanged: (v) => setState(() => _category = v))),
+                      Expanded(child: field(_unit, 'Satuan dasar', helper: 'mis. pcs, botol, kotak')),
                     ]),
                     Text('Harga', style: Theme.of(context).textTheme.titleMedium),
                     Row(spacing: 12, children: [
@@ -144,6 +168,22 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                       Expanded(child: field(_wholesalePrice, 'Harga grosir (Rp)', number: true, helper: 'Kosongkan bila tidak ada')),
                       Expanded(child: field(_wholesaleMin, 'Qty minimal grosir', number: true)),
                     ]),
+                    Text('Harga per kemasan', style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      'Isi = jumlah satuan dasar per kemasan. Pembelian otomatis dipecah ke kemasan terbesar dulu, '
+                      'mis. beli 25 dengan karton isi 20 → 1 karton + 5 satuan. Kosongkan yang tidak dipakai.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    for (final name in ProductPack.presetNames)
+                      Row(spacing: 12, children: [
+                        SizedBox(
+                          width: 72,
+                          child: Text(name[0].toUpperCase() + name.substring(1),
+                              style: Theme.of(context).textTheme.titleSmall),
+                        ),
+                        Expanded(child: field(_packContents[name]!, 'Isi per $name', number: true)),
+                        Expanded(child: field(_packPrice[name]!, 'Harga per $name (Rp)', number: true)),
+                      ]),
                     Text('Stok', style: Theme.of(context).textTheme.titleMedium),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
@@ -176,6 +216,52 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Kategori dipilih dari daftar; Owner bisa menambah kategori baru.
+class _CategoryField extends ConsumerWidget {
+  const _CategoryField({required this.value, required this.onChanged});
+
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  Future<void> _add(BuildContext context, WidgetRef ref) async {
+    final name = await askReason(context, title: 'Kategori baru', label: 'Nama kategori');
+    if (name == null) return;
+    try {
+      onChanged(await ref.read(categoryRepositoryProvider).add(name));
+    } catch (e) {
+      if (context.mounted) showMessage(context, '$e', isError: true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categories = [...ref.watch(categoriesProvider).value ?? const <String>[]];
+    // Kategori lama yang belum ada di daftar tetap bisa tampil.
+    if (value != null && !categories.contains(value)) categories.add(value!);
+    return Row(
+      spacing: 4,
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            key: ValueKey(value),
+            initialValue: value,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'Kategori'),
+            items: [for (final c in categories) DropdownMenuItem(value: c, child: Text(c))],
+            onChanged: onChanged,
+            validator: (v) => v == null ? 'Pilih kategori' : null,
+          ),
+        ),
+        IconButton(
+          tooltip: 'Tambah kategori',
+          icon: const Icon(Icons.add_circle_outline),
+          onPressed: () => _add(context, ref),
+        ),
+      ],
     );
   }
 }

@@ -7,6 +7,7 @@ import '../../../../core/utils/dates.dart';
 import '../../../../core/viewmodel/action_view_model.dart';
 import '../../../auth/auth_providers.dart';
 import '../../../expenses/expense_providers.dart';
+import '../../../products/domain/entities/product.dart';
 import '../../../products/product_providers.dart';
 import '../../../sales/domain/entities/invoice.dart';
 import '../../../sales/presentation/viewmodels/report_view_model.dart';
@@ -170,8 +171,19 @@ class DemoDataViewModel extends ActionViewModel {
         );
   });
 
+  /// Produk asli + katalog demo, untuk menghitung ulang harga kemasan saat nota demo diedit.
+  Map<String, Product> demoPricingProducts() => {
+    for (final p in ref.read(productsProvider).value ?? const <Product>[]) p.id: p,
+    for (final p in DemoCatalog.products) p.id: p,
+  };
+
   Future<bool> editInvoice(Invoice invoice, {required DateTime time, required List<int> qtyByLine}) => run(() {
-    final edited = DemoInvoiceEditor.edit(invoice, time: time, qtyByLine: qtyByLine);
+    final edited = DemoInvoiceEditor.edit(
+      invoice,
+      time: time,
+      qtyByLine: qtyByLine,
+      products: demoPricingProducts(),
+    );
     return ref.read(demoReportRepositoryProvider).updateInvoice(edited);
   });
 

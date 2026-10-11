@@ -19,6 +19,9 @@ abstract final class SalesModels {
         'discountAmount': l.discountAmount,
         'discountId': l.discountId,
         'discountLabel': l.discountLabel,
+        'packs': [
+          for (final p in l.packs) {'name': p.name, 'count': p.count, 'contents': p.contents, 'price': p.price},
+        ],
       };
 
   static CartLine lineFromMap(Map<String, dynamic> m) => CartLine(
@@ -32,6 +35,15 @@ abstract final class SalesModels {
         discountAmount: readInt(m['discountAmount']),
         discountId: readNullableString(m['discountId']),
         discountLabel: readString(m['discountLabel']),
+        packs: [
+          for (final p in readMapList(m['packs']))
+            PackUsage(
+              name: readString(p['name']),
+              count: readInt(p['count']),
+              contents: readInt(p['contents']),
+              price: readInt(p['price']),
+            ),
+        ],
       );
 
   static List<Map<String, dynamic>> linesToMap(List<CartLine> lines) => lines.map(lineToMap).toList();

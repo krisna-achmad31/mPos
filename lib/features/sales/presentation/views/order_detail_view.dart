@@ -16,6 +16,7 @@ import '../../domain/services/sale_calculator.dart';
 import '../../sales_providers.dart';
 import '../viewmodels/order_view_models.dart';
 import '../widgets/totals_table.dart';
+import '../widgets/line_text.dart';
 
 class OrderDetailView extends ConsumerWidget {
   const OrderDetailView({super.key, required this.orderId});
@@ -113,7 +114,7 @@ class _OrderBody extends ConsumerWidget {
                 dense: true,
                 title: Text(l.name),
                 subtitle: Text([
-                  '${l.qty} ${l.unit} × ${formatRupiah(l.unitPrice)}',
+                  lineDetail(l),
                   if (l.discountAmount > 0) '${l.discountLabel} −${formatRupiah(l.discountAmount)}',
                 ].join(' · ')),
                 trailing: Text(formatRupiah(l.net)),

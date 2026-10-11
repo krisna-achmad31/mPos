@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/quantity_dialog.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../auth/auth_providers.dart';
@@ -12,6 +13,7 @@ import '../../../pricing/pricing_providers.dart';
 import '../../../products/product_providers.dart';
 import '../../../sales/domain/services/cart_rules.dart';
 import '../viewmodels/customer_cart_view_model.dart';
+import '../../../sales/presentation/widgets/line_text.dart';
 
 class CartView extends ConsumerWidget {
   const CartView({super.key});
@@ -50,7 +52,7 @@ class CartView extends ConsumerWidget {
                     return ListTile(
                       title: Text(line.name),
                       subtitle: Text([
-                        '${formatRupiah(line.unitPrice)} / ${line.unit} (${line.priceType.label})',
+                        lineDetail(line),
                         if (estimated[i].discountAmount > 0)
                           '${estimated[i].discountLabel} −${formatRupiah(estimated[i].discountAmount)}',
                       ].join(' · ')),
@@ -61,7 +63,15 @@ class CartView extends ConsumerWidget {
                             icon: const Icon(Icons.remove_circle_outline),
                             onPressed: product == null ? null : () => notify(vm.setQty(i, line.qty - 1, product)),
                           ),
-                          Text('${line.qty}'),
+                          TextButton(
+                            onPressed: product == null
+                                ? null
+                                : () async {
+                                    final qty = await askQuantity(context, current: line.qty, unit: line.unit);
+                                    if (qty != null) notify(vm.setQty(i, qty, product));
+                                  },
+                            child: Text('${line.qty}'),
+                          ),
                           IconButton(
                             icon: const Icon(Icons.add_circle_outline),
                             onPressed: product == null ? null : () => notify(vm.setQty(i, line.qty + 1, product)),

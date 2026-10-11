@@ -78,21 +78,27 @@ class FirestoreProductRepository implements ProductRepository {
   }
 
   @override
-  Future<int> createProductsIfMissing(List<({Product product, int buyPrice})> items) async {
-    final ids = (await _products.get()).docs.map((d) => d.id).toSet();
+  Future<List<String>> upsertCatalogProducts(List<({Product product, int buyPrice})> items) async {
+    final existing = (await _products.get()).docs.map((d) => d.id).toSet();
     final batch = _db.batch();
-    var created = 0;
-    for (final item in items.where((i) => !ids.contains(i.product.id))) {
-      batch.set(_products.doc(item.product.id), {
-        ...ProductModel.toEditableMap(item.product),
+    final created = <String>[];
+    for (final item in items) {
+      final ref = _products.doc(item.product.id);
+      final map = ProductModel.toEditableMap(item.product);
+      if (existing.contains(item.product.id)) {
+        batch.update(ref, {'category': map['category'], 'packs': map['packs'], 'updatedAt': FieldValue.serverTimestamp()});
+        continue;
+      }
+      batch.set(ref, {
+        ...map,
         'stock': 0,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
       batch.set(_costs.doc(item.product.id), {'buyPrice': item.buyPrice, 'hpp': item.buyPrice});
-      created++;
+      created.add(item.product.id);
     }
-    if (created > 0) await batch.commit();
+    await batch.commit();
     return created;
   }
 

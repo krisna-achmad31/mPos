@@ -7,6 +7,7 @@ import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../stock/presentation/views/stock_opname_dialog.dart';
+import '../../../reports/domain/demo_catalog.dart';
 import '../../domain/entities/product.dart';
 import '../viewmodels/product_view_models.dart';
 
@@ -238,6 +239,7 @@ class _ProductCard extends StatelessWidget {
                         [
                           formatRupiah(p.sellPrice),
                           if (p.hasWholesale) 'grosir ${formatRupiah(p.wholesalePrice)} (≥${p.wholesaleMinQty})',
+                          for (final pack in p.packsBySize) '${pack.name} ${pack.contents}: ${formatRupiah(pack.price)}',
                           if (p.category.isNotEmpty) p.category,
                           if (!p.active) 'nonaktif',
                         ].join(' · '),
@@ -340,26 +342,26 @@ class _SampleProductsButton extends ConsumerWidget {
       icon: busy
           ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
           : const Icon(Icons.coffee_outlined),
-      label: const Text('Tambah produk contoh (cafe)'),
+      label: const Text('Produk contoh (cafe)'),
       onPressed: busy
           ? null
           : () async {
               final ok = await confirm(
                 context,
-                title: 'Tambah produk contoh?',
-                message: '20 produk distributor cafe (kopi, susu, sirup, bubuk minuman, kemasan) '
-                    'akan ditambahkan ke produk asli, lengkap dengan stok awal lewat dokumen Stok Masuk. '
-                    'Produk bisa diubah atau dinonaktifkan kapan saja.',
+                title: 'Tambah / perbarui produk contoh?',
+                message: '${DemoCatalog.products.length} produk distributor cafe dalam 8 kategori, dengan harga per karton / ball / pouch. '
+                    'Produk contoh yang belum ada ditambahkan beserta stok awal (Stok Masuk). '
+                    'Yang sudah ada hanya diperbarui kategori & kemasannya; harga tidak diubah.',
               );
               if (!ok || !context.mounted) return;
-              final created = await ref.read(sampleProductsViewModelProvider.notifier).addCafeSamples();
+              final result = await ref.read(sampleProductsViewModelProvider.notifier).addCafeSamples();
               if (!context.mounted) return;
               showMessage(
                 context,
-                created == null
+                result == null
                     ? '${ref.read(sampleProductsViewModelProvider).error}'
-                    : '$created produk contoh ditambahkan',
-                isError: created == null,
+                    : '${result.$1} produk ditambahkan, ${result.$2} diperbarui',
+                isError: result == null,
               );
             },
     );

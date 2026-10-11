@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_providers.dart';
+import 'data/repositories/firestore_category_repository.dart';
 import 'data/repositories/firestore_product_repository.dart';
 import 'domain/entities/product.dart';
 import 'domain/repositories/product_repository.dart';
@@ -28,4 +29,13 @@ final productCostProvider = FutureProvider.family<ProductCost?, String>(
 /// Hanya Owner yang boleh membaca ini (dijaga Firestore rules).
 final productCostsProvider = StreamProvider<Map<String, ProductCost>>(
   (ref) => ref.watch(productRepositoryProvider).watchCosts(),
+);
+
+final categoryRepositoryProvider = Provider(
+  (ref) => FirestoreCategoryRepository(ref.watch(tenantStoreProvider)),
+);
+
+/// Pilihan kategori: 8 bawaan + yang ditambahkan Owner.
+final categoriesProvider = StreamProvider<List<String>>(
+  (ref) => ref.watch(categoryRepositoryProvider).watch(),
 );

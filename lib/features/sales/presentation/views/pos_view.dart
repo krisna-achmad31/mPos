@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/quantity_dialog.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../../core/widgets/product_picker.dart';
@@ -16,6 +17,7 @@ import '../../domain/services/sale_calculator.dart';
 import '../viewmodels/pos_view_model.dart';
 import '../widgets/totals_table.dart';
 import '../../../../core/router/app_shell.dart';
+import '../widgets/line_text.dart';
 
 /// Kasir langsung untuk pembeli yang datang ke toko.
 class PosView extends ConsumerWidget {
@@ -118,7 +120,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
               return ListTile(
                 title: Text(line.name),
                 subtitle: Text([
-                  '${formatRupiah(line.unitPrice)} (${line.priceType.label})',
+                  '${lineDetail(line)} (${line.priceType.label})',
                   if (discount > 0) '${priced[i].discountLabel} −${formatRupiah(discount)}',
                 ].join(' · ')),
                 onLongPress: () => _manualPrice(i, line),
@@ -129,7 +131,15 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
                       icon: const Icon(Icons.remove_circle_outline),
                       onPressed: product == null ? null : () => vm.setQty(i, line.qty - 1, product),
                     ),
-                    Text('${line.qty}', style: Theme.of(context).textTheme.titleMedium),
+                    TextButton(
+                      onPressed: product == null
+                          ? null
+                          : () async {
+                              final qty = await askQuantity(context, current: line.qty, unit: line.unit);
+                              if (qty != null) vm.setQty(i, qty, product);
+                            },
+                      child: Text('${line.qty}', style: Theme.of(context).textTheme.titleMedium),
+                    ),
                     IconButton(
                       icon: const Icon(Icons.add_circle_outline),
                       onPressed: product == null ? null : () => vm.setQty(i, line.qty + 1, product),

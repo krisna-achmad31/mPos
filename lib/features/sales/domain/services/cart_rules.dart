@@ -42,12 +42,9 @@ abstract final class CartRules {
 
     final index = result.indexWhere((l) => l.productId == product.id && l.priceType != PriceType.manual);
     if (index >= 0) {
-      final newQty = result[index].qty + qty;
-      final (price, type) = PricingService.autoPrice(product, newQty);
-      result[index] = result[index].copyWith(qty: newQty, unitPrice: price, priceType: type);
+      result[index] = _priced(result[index], product, result[index].qty + qty);
     } else {
-      final (price, type) = PricingService.autoPrice(product, qty);
-      result.add(_line(product, qty, price, type));
+      result.add(_priced(_line(product, qty, product.sellPrice, PriceType.retail), product, qty));
     }
     return result;
   }
@@ -61,8 +58,7 @@ abstract final class CartRules {
     if (line.priceType == PriceType.manual) {
       result[index] = line.copyWith(qty: qty);
     } else {
-      final (price, type) = PricingService.autoPrice(product, qty);
-      result[index] = line.copyWith(qty: qty, unitPrice: price, priceType: type);
+      result[index] = _priced(line, product, qty);
     }
     return result;
   }
@@ -91,6 +87,7 @@ abstract final class CartRules {
                   customerId: customerId,
                   unitPrice: line.unitPrice,
                   qty: line.qty,
+                  gross: line.gross,
                   discounts: discounts,
                   now: now,
                 );
@@ -103,6 +100,12 @@ abstract final class CartRules {
                 );
         }(),
     ];
+  }
+
+  /// Harga otomatis: pecah ke kemasan (karton/ball/pouch), sisanya satuan / grosir.
+  static CartLine _priced(CartLine line, Product product, int qty) {
+    final price = PricingService.priceLine(product, qty);
+    return line.copyWith(qty: qty, unitPrice: price.unitPrice, priceType: price.type, packs: price.packs);
   }
 
   static void _ensureStock(Product product, int requested) {

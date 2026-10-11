@@ -16,6 +16,10 @@ abstract final class ProductModel {
         trackStock: readBool(map['trackStock'], fallback: true),
         stock: readInt(map['stock']),
         active: readBool(map['active'], fallback: true),
+        packs: [
+          for (final m in readMapList(map['packs']))
+            ProductPack(name: readString(m['name']), contents: readInt(m['contents']), price: readInt(m['price'])),
+        ],
       );
 
   /// Tanpa field `stock`: stok hanya berubah lewat transaksi stok.
@@ -32,6 +36,10 @@ abstract final class ProductModel {
         'minStock': p.minStock,
         'trackStock': p.trackStock,
         'active': p.active,
+        'packs': [
+          for (final pack in p.packs.where((x) => x.isValid))
+            {'name': pack.name.trim(), 'contents': pack.contents, 'price': pack.price},
+        ],
       };
 
   static ProductCost costFromMap(String productId, Map<String, dynamic>? map) => ProductCost(

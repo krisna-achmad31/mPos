@@ -11,9 +11,11 @@ import '../../../../core/widgets/async_value_view.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../sales/domain/entities/invoice.dart';
 import '../../data/demo_report_repository.dart';
+import '../../domain/demo_invoice_editor.dart';
 import '../../domain/sales_report.dart';
 import '../viewmodels/report_view_model.dart';
 import '../widgets/report_widgets.dart';
+import '../../../sales/presentation/widgets/line_text.dart';
 
 class ReportsView extends ConsumerWidget {
   const ReportsView({super.key});
@@ -618,7 +620,7 @@ class _TransactionList extends StatelessWidget {
             ),
             children: [
               for (final l in inv.lines)
-                _row(context, '${l.qty} × ${l.name} @${formatRupiah(l.unitPrice)}', formatRupiah(l.net)),
+                _row(context, '${l.name}: ${lineDetail(l)}', formatRupiah(l.net)),
               if (!report.isDemo)
                 Align(
                   alignment: Alignment.centerRight,
@@ -663,11 +665,16 @@ class _DemoInvoiceEditDialogState extends ConsumerState<_DemoInvoiceEditDialog> 
   }
 
   int get _previewTotal {
-    var total = 0;
-    for (var i = 0; i < widget.invoice.lines.length; i++) {
-      total += widget.invoice.lines[i].unitPrice * (int.tryParse(_qty[i].text) ?? 0);
+    try {
+      return DemoInvoiceEditor.edit(
+        widget.invoice,
+        time: widget.invoice.createdAt,
+        qtyByLine: [for (final c in _qty) int.tryParse(c.text) ?? 0],
+        products: ref.read(demoDataViewModelProvider.notifier).demoPricingProducts(),
+      ).totals.total;
+    } catch (_) {
+      return 0;
     }
-    return total;
   }
 
   Future<void> _save() async {

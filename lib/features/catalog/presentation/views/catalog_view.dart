@@ -59,8 +59,8 @@ class CatalogView extends ConsumerWidget {
                 return GridView.builder(
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 240,
-                    mainAxisExtent: 190,
+                    maxCrossAxisExtent: 280,
+                    mainAxisExtent: 250,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                   ),
@@ -108,6 +108,9 @@ class _ProductCard extends ConsumerWidget {
             Text('per ${product.unit}', style: text.bodySmall),
             if (product.hasWholesale)
               Text('Grosir ≥${product.wholesaleMinQty}: ${formatRupiah(product.wholesalePrice)}', style: text.bodySmall),
+            for (final pack in product.packsBySize)
+              Text('${pack.name[0].toUpperCase()}${pack.name.substring(1)} isi ${pack.contents}: ${formatRupiah(pack.price)}',
+                  style: text.bodySmall?.copyWith(color: scheme.primary)),
             const Spacer(),
             Row(
               children: [
@@ -117,7 +120,20 @@ class _ProductCard extends ConsumerWidget {
                     style: text.bodySmall?.copyWith(color: out ? scheme.error : null),
                   ),
                 ),
+                for (final pack in product.packsBySize.reversed.take(2))
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      onPressed: out ? null : () => _add(context, ref, qty: pack.contents),
+                      child: Text('+${pack.name}'),
+                    ),
+                  ),
                 IconButton.filledTonal(
+                  tooltip: '+1 ${product.unit}',
                   icon: const Icon(Icons.add_shopping_cart),
                   onPressed: out ? null : () => _add(context, ref),
                 ),
@@ -129,9 +145,9 @@ class _ProductCard extends ConsumerWidget {
     );
   }
 
-  Future<void> _add(BuildContext context, WidgetRef ref) async {
+  Future<void> _add(BuildContext context, WidgetRef ref, {int qty = 1}) async {
     final uid = ref.read(currentUserProvider).uid;
-    final message = ref.read(customerCartViewModelProvider(uid).notifier).add(product, 1);
-    showMessage(context, message ?? '${product.name} masuk keranjang', isError: message != null);
+    final message = ref.read(customerCartViewModelProvider(uid).notifier).add(product, qty);
+    showMessage(context, message ?? '$qty ${product.unit} ${product.name} masuk keranjang', isError: message != null);
   }
 }

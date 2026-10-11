@@ -14,6 +14,7 @@ import '../../domain/services/sale_calculator.dart';
 import '../../sales_providers.dart';
 import '../viewmodels/order_view_models.dart';
 import '../widgets/totals_table.dart';
+import '../widgets/line_text.dart';
 
 /// Nota / invoice. Dipakai Owner dan Customer.
 class InvoiceView extends ConsumerWidget {
@@ -128,7 +129,7 @@ class _InvoiceBody extends ConsumerWidget {
                   Text(formatRupiah(line.gross)),
                 ],
               ),
-              Text('${line.qty} ${line.unit} × ${formatRupiah(line.unitPrice)}', style: text.bodySmall),
+              Text(lineDetail(line), style: text.bodySmall),
               if (line.discountAmount > 0)
                 Row(
                   children: [

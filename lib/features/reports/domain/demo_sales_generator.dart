@@ -124,24 +124,28 @@ class DemoSalesGenerator {
       }
       if (qty <= 0) continue;
 
-      final (price, type) = PricingService.autoPrice(product, qty);
-      lines.add(
-        CartLine(
-          productId: product.id,
-          name: product.name,
-          unit: product.unit,
-          qty: qty,
-          unitPrice: price,
-          priceType: type,
-          trackStock: product.trackStock,
-        ),
+      final price = PricingService.priceLine(product, qty);
+      final line = CartLine(
+        productId: product.id,
+        name: product.name,
+        unit: product.unit,
+        qty: qty,
+        unitPrice: price.unitPrice,
+        priceType: price.type,
+        trackStock: product.trackStock,
+        packs: price.packs,
       );
-      spent += price * qty;
+      lines.add(line);
+      spent += line.gross;
     }
     return lines;
   }
 
-  int _lineTotal(Product p, int qty) => PricingService.autoPrice(p, qty).$1 * qty;
+  int _lineTotal(Product p, int qty) {
+    final price = PricingService.priceLine(p, qty);
+    final packed = price.packs.fold(0, (s, x) => s + x.qty);
+    return price.packs.fold(0, (s, x) => s + x.total) + (qty - packed) * price.unitPrice;
+  }
 
   // Kebanyakan pembeli membeli 1–3; sesekali borongan (harga grosir bila ada).
   int _quantity(Product p) {

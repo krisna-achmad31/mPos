@@ -50,6 +50,9 @@ class _StockInFormState extends ConsumerState<_StockInForm> {
   Product? _selected;
   int _pickerKey = 0;
 
+  /// Isi kemasan yang dipilih (1 = satuan dasar).
+  int _contents = 1;
+
   @override
   void dispose() {
     for (final c in [_supplier, _docNo, _qty, _price]) {
@@ -62,13 +65,15 @@ class _StockInFormState extends ConsumerState<_StockInForm> {
     final product = _selected;
     if (product == null) return;
     try {
+      // Qty & harga beli per kemasan dikonversi ke satuan dasar (stok selalu dalam satuan dasar).
       ref.read(stockInViewModelProvider.notifier).addItem(
             product,
-            qty: parseRupiah(_qty.text),
-            buyPrice: parseRupiah(_price.text),
+            qty: parseRupiah(_qty.text) * _contents,
+            buyPrice: (parseRupiah(_price.text) / _contents).round(),
           );
       setState(() {
         _selected = null;
+        _contents = 1;
         _pickerKey++;
         _qty.text = '1';
         _price.clear();
@@ -138,16 +143,34 @@ class _StockInFormState extends ConsumerState<_StockInForm> {
               width: 320,
               child: ProductPicker(
                 key: ValueKey(_pickerKey),
-                onSelected: (p) => setState(() => _selected = p),
+                onSelected: (p) => setState(() {
+                  _selected = p;
+                  _contents = 1;
+                }),
               ),
             ),
+            if (_selected != null && _selected!.packsBySize.isNotEmpty)
+              SizedBox(
+                width: 170,
+                child: DropdownButtonFormField<int>(
+                  key: ValueKey(_selected!.id),
+                  initialValue: _contents,
+                  decoration: const InputDecoration(labelText: 'Satuan'),
+                  items: [
+                    DropdownMenuItem(value: 1, child: Text(_selected!.unit)),
+                    for (final pack in _selected!.packsBySize)
+                      DropdownMenuItem(value: pack.contents, child: Text('${pack.name} (isi ${pack.contents})')),
+                  ],
+                  onChanged: (v) => setState(() => _contents = v ?? 1),
+                ),
+              ),
             SizedBox(
               width: 96,
               child: TextField(controller: _qty, keyboardType: TextInputType.number, inputFormatters: digits, decoration: const InputDecoration(labelText: 'Qty')),
             ),
             SizedBox(
               width: 160,
-              child: TextField(controller: _price, keyboardType: TextInputType.number, inputFormatters: digits, decoration: const InputDecoration(labelText: 'Harga beli (Rp)')),
+              child: TextField(controller: _price, keyboardType: TextInputType.number, inputFormatters: digits, decoration: InputDecoration(labelText: _contents > 1 ? 'Harga beli per kemasan' : 'Harga beli (Rp)')),
             ),
             FilledButton.tonalIcon(onPressed: _selected == null ? null : _add, icon: const Icon(Icons.add), label: const Text('Tambah')),
           ],

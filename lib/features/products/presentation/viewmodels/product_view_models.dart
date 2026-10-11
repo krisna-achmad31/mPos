@@ -78,6 +78,14 @@ class ProductFormViewModel extends ActionViewModel {
           throw const AppException('Harga grosir harus lebih murah dari harga satuan.');
         }
         if (product.minStock < 0) throw const AppException('Stok minimum tidak boleh negatif.');
+        for (final pack in product.packs) {
+          if (pack.price > pack.contents * product.sellPrice) {
+            throw AppException('Harga per ${pack.name} lebih mahal dari harga satuan × isi '
+                '(${pack.contents} × ${product.sellPrice}).');
+          }
+        }
+        final sizes = product.packs.map((p) => p.contents).toList();
+        if (sizes.toSet().length != sizes.length) throw const AppException('Isi tiap kemasan harus berbeda.');
         final user = ref.read(currentUserProvider);
         await ref.read(productRepositoryProvider).saveProduct(product, buyPrice: buyPrice, userId: user.uid);
       });
@@ -89,38 +97,42 @@ class ProductFormViewModel extends ActionViewModel {
 final productFormViewModelProvider =
     NotifierProvider<ProductFormViewModel, AsyncValue<void>>(ProductFormViewModel.new);
 
-/// Memasukkan katalog contoh distributor cafe ke produk asli, beserta stok awalnya.
+/// Memasukkan / menyinkronkan katalog contoh distributor cafe ke produk asli.
 class SampleProductsViewModel extends ActionViewModel {
-  /// Mengembalikan jumlah produk yang ditambahkan.
-  Future<int?> addCafeSamples() async {
-    var created = 0;
+  /// Mengembalikan (produk baru, produk diperbarui).
+  Future<(int created, int updated)?> addCafeSamples() async {
+    var result = (0, 0);
     final ok = await run(() async {
       final user = ref.read(currentUserProvider);
       final seeds = DemoCatalog.seedProducts;
-      created = await ref
+      final created = await ref
           .read(productRepositoryProvider)
-          .createProductsIfMissing([for (final s in seeds) (product: s.product, buyPrice: s.buyPrice)]);
-      if (created == 0) throw const AppException('Produk contoh cafe sudah ada semua.');
-      await ref.read(stockRepositoryProvider).createReceipt(
-            StockReceipt(
-              id: '',
-              supplier: 'Stok awal (produk contoh)',
-              docNo: 'CONTOH-CAFE',
-              date: DateTime.now(),
-              items: [
-                for (final s in seeds)
-                  StockReceiptItem(
-                    productId: s.product.id,
-                    productName: s.product.name,
-                    qty: s.initialStock,
-                    buyPrice: s.buyPrice,
-                  ),
-              ],
-            ),
-            user,
-          );
+          .upsertCatalogProducts([for (final s in seeds) (product: s.product, buyPrice: s.buyPrice)]);
+      final fresh = seeds.where((s) => created.contains(s.product.id)).toList();
+      if (fresh.isNotEmpty) {
+        // Stok awal hanya untuk produk yang baru dibuat.
+        await ref.read(stockRepositoryProvider).createReceipt(
+              StockReceipt(
+                id: '',
+                supplier: 'Stok awal (produk contoh)',
+                docNo: 'CONTOH-CAFE',
+                date: DateTime.now(),
+                items: [
+                  for (final s in fresh)
+                    StockReceiptItem(
+                      productId: s.product.id,
+                      productName: s.product.name,
+                      qty: s.initialStock,
+                      buyPrice: s.buyPrice,
+                    ),
+                ],
+              ),
+              user,
+            );
+      }
+      result = (created.length, seeds.length - created.length);
     });
-    return ok ? created : null;
+    return ok ? result : null;
   }
 }
 

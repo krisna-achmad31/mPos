@@ -61,8 +61,9 @@ class Discount extends Equatable {
       (this.customerId == null || this.customerId == customerId);
 
   /// Potongan Rupiah untuk satu baris, tidak melebihi nilai baris.
-  int amountFor({required int unitPrice, required int qty}) {
-    final gross = unitPrice * qty;
+  /// [gross] = nilai baris sebenarnya (mis. bila sebagian dihitung per karton).
+  int amountFor({required int unitPrice, required int qty, int? gross}) {
+    gross ??= unitPrice * qty;
     final raw = switch (type) {
       DiscountType.percent => (gross * value / 100).round(),
       DiscountType.amount => (value * qty).round(),
