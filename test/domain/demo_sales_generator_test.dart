@@ -45,9 +45,18 @@ void main() {
     }
   });
 
-  test('qty tidak melebihi stok produk', () {
-    final limited = [product(id: 'x', price: 10000, stock: 3), product(id: 'y', price: 5000, stock: 2)];
+  test('stok kecil tidak menghalangi target secara default', () {
+    final limited = [product(id: 'x', price: 1600, stock: 3)];
     final invoices = DemoSalesGenerator(seed: 3).generate(date: day, target: 1000000, products: limited);
+    final total = invoices.fold<int>(0, (s, i) => s + i.totals.total);
+    expect(total, lessThanOrEqualTo(1000000));
+    expect(total, greaterThan(1000000 - 1600));
+  });
+
+  test('respectStock: qty tidak melebihi stok produk', () {
+    final limited = [product(id: 'x', price: 10000, stock: 3), product(id: 'y', price: 5000, stock: 2)];
+    final invoices = DemoSalesGenerator(seed: 3)
+        .generate(date: day, target: 1000000, products: limited, respectStock: true);
     final sold = <String, int>{};
     for (final inv in invoices) {
       for (final l in inv.lines) {

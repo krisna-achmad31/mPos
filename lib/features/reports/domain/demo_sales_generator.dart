@@ -19,6 +19,9 @@ class DemoSalesGenerator {
 
   final Random _rnd;
 
+  /// false (default): data demo tidak dibatasi stok asli, karena tidak pernah mengurangi stok.
+  bool _respectStock = false;
+
   List<Invoice> generate({
     required DateTime date,
     required int target,
@@ -26,11 +29,15 @@ class DemoSalesGenerator {
     List<String> customerNames = const [],
     int openHour = 8,
     int closeHour = 21,
+    bool respectStock = false,
   }) {
+    _respectStock = respectStock;
     if (target <= 0) throw const AppException('Target total harus lebih dari 0.');
     if (closeHour <= openHour) throw const AppException('Jam tutup harus setelah jam buka.');
 
-    final eligible = products.where((p) => p.active && p.sellPrice > 0 && (!p.trackStock || p.stock > 0)).toList();
+    final eligible = products
+        .where((p) => p.active && p.sellPrice > 0 && (!_respectStock || !p.trackStock || p.stock > 0))
+        .toList();
     if (eligible.isEmpty) throw const AppException('Belum ada produk aktif yang bisa dipakai untuk data demo.');
 
     final popularity = _popularity(eligible);
@@ -79,7 +86,8 @@ class DemoSalesGenerator {
     };
   }
 
-  int _available(Product p, Map<String, int> used) => p.trackStock ? p.stock - (used[p.id] ?? 0) : 1 << 20;
+  int _available(Product p, Map<String, int> used) =>
+      _respectStock && p.trackStock ? p.stock - (used[p.id] ?? 0) : 1 << 20;
 
   List<CartLine> _basket(
     List<Product> products,
