@@ -32,6 +32,7 @@ const ownerNav = [
 
 const spvNav = [
   NavItem('Stok masuk', Icons.move_to_inbox_outlined, '/spv'),
+  NavItem('Pengiriman', Icons.local_shipping_outlined, '/spv/deliveries'),
   NavItem('Pengajuan saya', Icons.fact_check_outlined, '/spv/requests'),
 ];
 

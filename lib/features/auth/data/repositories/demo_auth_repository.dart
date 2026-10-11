@@ -88,6 +88,9 @@ class DemoAuthRepository implements AuthRepository {
     try {
       final users = _db.collection(Collections.users);
       final batch = _db.batch()..set(users.doc(user.uid), AppUserModel.toMap(user), SetOptions(merge: true));
+      // SPV (kurir) dan dua pelanggan uji selalu ada agar bisa langsung dipilih Owner.
+      final spv = demoUser(distributor, UserRole.spv);
+      batch.set(users.doc(spv.uid), AppUserModel.toMap(spv), SetOptions(merge: true));
       for (var i = 1; i <= demoCustomers.length; i++) {
         final c = demoCustomer(distributor, i);
         batch.set(users.doc(c.uid), AppUserModel.toMap(c), SetOptions(merge: true));

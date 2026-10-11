@@ -2,6 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/firebase/firebase_providers.dart';
 import '../auth/auth_providers.dart';
+import '../auth/domain/entities/app_user.dart';
+import '../auth/domain/entities/user_role.dart';
 import 'data/repositories/firestore_sales_repository.dart';
 import 'domain/entities/invoice.dart';
 import 'domain/entities/sales_order.dart';
@@ -11,11 +13,21 @@ final salesRepositoryProvider = Provider<SalesRepository>(
   (ref) => FirestoreSalesRepository(ref.watch(tenantStoreProvider), ref.watch(clockProvider)),
 );
 
-/// Owner melihat semua pesanan; Customer hanya miliknya.
+/// Owner: semua pesanan. Customer: pesanannya. SPV: pesanan yang ia antar sebagai kurir.
 final ordersProvider = StreamProvider<List<SalesOrder>>((ref) {
   final user = ref.watch(currentUserProvider);
-  return ref.watch(salesRepositoryProvider).watchOrders(customerId: user.isOwner ? null : user.uid);
+  final repo = ref.watch(salesRepositoryProvider);
+  return switch (user.role) {
+    UserRole.owner => repo.watchOrders(),
+    UserRole.spv => repo.watchOrders(courierId: user.uid),
+    UserRole.customer => repo.watchOrders(customerId: user.uid),
+  };
 });
+
+/// SPV yang bisa ditugaskan sebagai kurir.
+final couriersProvider = StreamProvider<List<AppUser>>((ref) => ref
+    .watch(userRepositoryProvider)
+    .watchUsers(distributorId: ref.watch(currentUserProvider).distributorId, role: UserRole.spv));
 
 final orderProvider = StreamProvider.family<SalesOrder?, String>(
   (ref, id) => ref.watch(salesRepositoryProvider).watchOrder(id),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/firebase/firebase_providers.dart';
 import '../../../../core/viewmodel/action_view_model.dart';
 import '../../../auth/auth_providers.dart';
+import '../../../auth/domain/entities/app_user.dart';
 import '../../../pricing/pricing_providers.dart';
 import '../../../settings/settings_providers.dart';
 import '../../domain/entities/cart_line.dart';
@@ -39,8 +40,13 @@ class OrderActionsViewModel extends ActionViewModel {
     return ok ? invoiceId : null;
   }
 
-  Future<bool> setStatus(SalesOrder order, OrderStatus status) =>
-      run(() => ref.read(salesRepositoryProvider).updateOrderStatus(order.id, status));
+  Future<bool> assignCourier(SalesOrder order, AppUser courier) => run(() => ref
+      .read(salesRepositoryProvider)
+      .assignCourier(order: order, courier: courier, by: ref.read(currentUserProvider)));
+
+  Future<bool> moveStatus(SalesOrder order, OrderStatus to) => run(() => ref
+      .read(salesRepositoryProvider)
+      .moveStatus(order: order, to: to, by: ref.read(currentUserProvider)));
 
   /// Dipakai Owner dan Customer (Customer hanya saat status Menunggu).
   Future<bool> cancel(SalesOrder order, String reason) => run(() => ref

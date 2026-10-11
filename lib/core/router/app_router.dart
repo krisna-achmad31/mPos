@@ -103,6 +103,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       shell([
         page('/spv', (_) => const StockInView()),
         page('/spv/requests', (_) => const ChangeRequestsView()),
+        page('/spv/deliveries', (_) => const OrdersView()),
+        page('/spv/orders/:id', (s) => OrderDetailView(orderId: s.pathParameters['id']!)),
       ]),
       shell([
         page('/shop', (_) => const CatalogView()),

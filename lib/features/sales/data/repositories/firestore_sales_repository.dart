@@ -11,6 +11,7 @@ import '../../domain/entities/invoice.dart';
 import '../../domain/entities/sales_order.dart';
 import '../../domain/repositories/sales_repository.dart';
 import '../../domain/services/invoice_number.dart';
+import '../../domain/services/order_flow.dart';
 import '../../domain/services/sale_calculator.dart';
 import '../models/sales_models.dart';
 
@@ -32,9 +33,10 @@ class FirestoreSalesRepository implements SalesRepository {
   // ---------------------------------------------------------------- Pesanan
 
   @override
-  Stream<List<SalesOrder>> watchOrders({String? customerId}) {
+  Stream<List<SalesOrder>> watchOrders({String? customerId, String? courierId}) {
     Query<Map<String, dynamic>> query = _orders;
     if (customerId != null) query = query.where('customerId', isEqualTo: customerId);
+    if (courierId != null) query = query.where('courierId', isEqualTo: courierId);
     return query.snapshots().map((snap) {
       final list = snap.docs.map((d) => SalesModels.orderFromMap(d.id, d.data())).toList();
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -125,8 +127,46 @@ class FirestoreSalesRepository implements SalesRepository {
   }
 
   @override
-  Future<void> updateOrderStatus(String orderId, OrderStatus status) =>
-      _orders.doc(orderId).update({'status': status.name, '${status.name}At': FieldValue.serverTimestamp()});
+  Future<void> assignCourier({required SalesOrder order, required AppUser courier, required AppUser by}) =>
+      _db.runTransaction((tx) async {
+        final current = await _currentOrder(tx, order.id);
+        if (!OrderFlow.canMove(current, OrderStatus.shipped, by)) {
+          throw AppException('Pesanan berstatus ${current.status.label} belum bisa diserahkan ke kurir.');
+        }
+        tx.update(_orders.doc(order.id), {
+          'status': OrderStatus.shipped.name,
+          'courierId': courier.uid,
+          'courierName': courier.name,
+          'shippedAt': FieldValue.serverTimestamp(),
+        });
+        writeAudit(_store, tx,
+            userId: by.uid,
+            userName: by.name,
+            action: 'assign_courier',
+            entity: Collections.orders,
+            entityId: order.id,
+            after: courier.name);
+      });
+
+  @override
+  Future<void> moveStatus({required SalesOrder order, required OrderStatus to, required AppUser by}) =>
+      _db.runTransaction((tx) async {
+        final current = await _currentOrder(tx, order.id);
+        if (!OrderFlow.canMove(current, to, by)) {
+          throw AppException('Status ${current.status.label} tidak bisa diubah ke ${to.label}.');
+        }
+        tx.update(_orders.doc(order.id), {
+          'status': to.name,
+          '${to.name}At': FieldValue.serverTimestamp(),
+          '${to.name}By': by.uid,
+        });
+      });
+
+  Future<SalesOrder> _currentOrder(Transaction tx, String id) async {
+    final snap = await tx.get(_orders.doc(id));
+    if (!snap.exists) throw const AppException('Pesanan tidak ditemukan.');
+    return SalesModels.orderFromMap(snap.id, snap.data()!);
+  }
 
   @override
   Future<void> cancelOrder({required SalesOrder order, required String reason, required AppUser by}) async {

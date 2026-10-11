@@ -5,8 +5,14 @@ import 'cart_line.dart';
 enum OrderStatus {
   pending('Menunggu'),
   processing('Diproses'),
-  shipped('Dikirim'),
-  done('Selesai'),
+  /// Owner menyerahkan ke kurir (SPV).
+  shipped('Dibawa kurir'),
+
+  /// Kurir menandai sudah sampai.
+  delivered('Terkirim'),
+
+  /// Customer mengonfirmasi barang diterima.
+  done('Diterima'),
   cancelled('Dibatalkan');
 
   const OrderStatus(this.label);
@@ -32,6 +38,8 @@ class SalesOrder extends Equatable {
     this.note = '',
     this.invoiceId,
     this.cancelReason = '',
+    this.courierId,
+    this.courierName = '',
   });
 
   final String id;
@@ -45,8 +53,12 @@ class SalesOrder extends Equatable {
   final String? invoiceId;
   final String cancelReason;
 
+  /// SPV yang ditugaskan sebagai kurir.
+  final String? courierId;
+  final String courierName;
+
   int get subtotal => lines.fold(0, (sum, l) => sum + l.gross);
 
   @override
-  List<Object?> get props => [id, customerId, lines, status, invoiceId, cancelReason];
+  List<Object?> get props => [id, customerId, lines, status, invoiceId, cancelReason, courierId];
 }

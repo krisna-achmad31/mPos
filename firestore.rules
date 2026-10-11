@@ -96,14 +96,26 @@ service cloud.firestore {
       }
 
       match /orders/{id} {
-        allow read: if isOwner(d) || (isCustomer(d) && resource.data.customerId == request.auth.uid);
+        allow read: if isOwner(d)
+          || (isCustomer(d) && resource.data.customerId == request.auth.uid)
+          || (isSpv(d) && resource.data.courierId == request.auth.uid);
         allow create: if isCustomer(d) && request.resource.data.customerId == request.auth.uid
           && request.resource.data.status == 'pending';
         allow update: if isOwner(d)
+          // Customer: batalkan saat masih menunggu, atau konfirmasi diterima setelah terkirim.
           || (isCustomer(d) && resource.data.customerId == request.auth.uid
               && resource.data.status == 'pending'
               && request.resource.data.status == 'cancelled'
-              && onlyChanges(['status', 'cancelReason', 'cancelledBy', 'cancelledAt']));
+              && onlyChanges(['status', 'cancelReason', 'cancelledBy', 'cancelledAt']))
+          || (isCustomer(d) && resource.data.customerId == request.auth.uid
+              && resource.data.status == 'delivered'
+              && request.resource.data.status == 'done'
+              && onlyChanges(['status', 'doneAt', 'doneBy']))
+          // Kurir (SPV) yang ditugaskan: tandai terkirim.
+          || (isSpv(d) && resource.data.courierId == request.auth.uid
+              && resource.data.status == 'shipped'
+              && request.resource.data.status == 'delivered'
+              && onlyChanges(['status', 'deliveredAt', 'deliveredBy']));
       }
 
       match /invoices/{id} {

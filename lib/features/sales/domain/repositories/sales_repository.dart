@@ -6,7 +6,8 @@ import '../services/sale_calculator.dart';
 
 abstract interface class SalesRepository {
   // ---- Pesanan online ----
-  Stream<List<SalesOrder>> watchOrders({String? customerId});
+  /// [customerId] untuk Customer, [courierId] untuk SPV (kurir); keduanya null = semua (Owner).
+  Stream<List<SalesOrder>> watchOrders({String? customerId, String? courierId});
 
   Stream<SalesOrder?> watchOrder(String id);
 
@@ -22,7 +23,11 @@ abstract interface class SalesRepository {
     required AppUser by,
   });
 
-  Future<void> updateOrderStatus(String orderId, OrderStatus status);
+  /// Owner menyerahkan pesanan ke kurir (SPV) → status "Dibawa kurir".
+  Future<void> assignCourier({required SalesOrder order, required AppUser courier, required AppUser by});
+
+  /// Pindah status sesuai [OrderFlow] (Terkirim oleh kurir, Diterima oleh customer).
+  Future<void> moveStatus({required SalesOrder order, required OrderStatus to, required AppUser by});
 
   /// Stok dikembalikan; nota (bila ada) ditandai batal.
   Future<void> cancelOrder({required SalesOrder order, required String reason, required AppUser by});

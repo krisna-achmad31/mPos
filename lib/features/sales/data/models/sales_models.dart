@@ -47,6 +47,8 @@ abstract final class SalesModels {
         note: readString(m['note']),
         invoiceId: readNullableString(m['invoiceId']),
         cancelReason: readString(m['cancelReason']),
+        courierId: readNullableString(m['courierId']),
+        courierName: readString(m['courierName']),
       );
 
   static PaymentMethod? methodFromName(Object? name) =>

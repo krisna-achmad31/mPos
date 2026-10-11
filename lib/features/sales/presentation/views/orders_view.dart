@@ -7,6 +7,7 @@ import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/async_value_view.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../auth/auth_providers.dart';
+import '../../../auth/domain/entities/user_role.dart';
 import '../../domain/entities/sales_order.dart';
 import '../../sales_providers.dart';
 import '../../../../core/router/app_shell.dart';
@@ -17,15 +18,19 @@ class OrdersView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isOwner = ref.watch(currentUserProvider).isOwner;
-    final base = isOwner ? '/owner' : '/shop';
-    const tabs = OrderStatus.values;
+    final user = ref.watch(currentUserProvider);
+    final isOwner = user.isOwner;
+    final isCourier = user.role == UserRole.spv;
+    final base = isOwner ? '/owner' : (isCourier ? '/spv' : '/shop');
+    final tabs = isCourier
+        ? const [OrderStatus.shipped, OrderStatus.delivered, OrderStatus.done]
+        : OrderStatus.values;
 
     return DefaultTabController(
       length: tabs.length,
       child: Scaffold(
         appBar: AppBar(leading: shellMenuButton(context), 
-          title: Text(isOwner ? 'Pesanan Online' : 'Pesanan Saya'),
+          title: Text(isOwner ? 'Pesanan Online' : (isCourier ? 'Pengiriman Saya' : 'Pesanan Saya')),
           bottom: TabBar(isScrollable: true, tabs: [for (final s in tabs) Tab(text: s.label)]),
         ),
         body: AsyncValueView(
@@ -35,7 +40,7 @@ class OrdersView extends ConsumerWidget {
               for (final status in tabs)
                 _OrderList(
                   orders: orders.where((o) => o.status == status).toList(),
-                  showCustomer: isOwner,
+                  showCustomer: isOwner || isCourier,
                   onTap: (o) => context.go('$base/orders/${o.id}'),
                 ),
             ],
@@ -63,7 +68,11 @@ class _OrderList extends StatelessWidget {
         final o = orders[i];
         return ListTile(
           title: Text(showCustomer ? o.customerName : '${o.lines.length} barang'),
-          subtitle: Text('${formatDateTime(o.createdAt)} · ${o.lines.fold(0, (s, l) => s + l.qty)} item'),
+          subtitle: Text([
+            '${formatDateTime(o.createdAt)} · ${o.lines.fold(0, (s, l) => s + l.qty)} item',
+            if (showCustomer && o.address.isNotEmpty) o.address,
+            if (o.courierName.isNotEmpty) 'Kurir: ${o.courierName}',
+          ].join('\n')),
           trailing: Text(formatRupiah(o.subtotal)),
           onTap: () => onTap(o),
         );
