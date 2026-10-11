@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/async_value_view.dart';
 import '../../../../core/widgets/empty_state.dart';
+import '../../../../core/widgets/feedback.dart';
 import '../../../stock/presentation/views/stock_opname_dialog.dart';
 import '../../domain/entities/product.dart';
 import '../viewmodels/product_view_models.dart';
@@ -16,7 +17,11 @@ class ProductListView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(leading: shellMenuButton(context), title: const Text('Produk')),
+      appBar: AppBar(
+        leading: shellMenuButton(context),
+        title: const Text('Produk'),
+        actions: const [_SampleProductsButton(), SizedBox(width: 8)],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.go('/owner/products/new'),
         icon: const Icon(Icons.add),
@@ -85,6 +90,43 @@ class _ProductTile extends StatelessWidget {
         ],
       ),
       onTap: () => context.go('/owner/products/${product.id}'),
+    );
+  }
+}
+
+/// Menambahkan katalog contoh distributor cafe ke produk asli (sekali).
+class _SampleProductsButton extends ConsumerWidget {
+  const _SampleProductsButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final busy = ref.watch(sampleProductsViewModelProvider).isLoading;
+    return TextButton.icon(
+      icon: busy
+          ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.coffee_outlined),
+      label: const Text('Tambah produk contoh (cafe)'),
+      onPressed: busy
+          ? null
+          : () async {
+              final ok = await confirm(
+                context,
+                title: 'Tambah produk contoh?',
+                message: '20 produk distributor cafe (kopi, susu, sirup, bubuk minuman, kemasan) '
+                    'akan ditambahkan ke produk asli, lengkap dengan stok awal lewat dokumen Stok Masuk. '
+                    'Produk bisa diubah atau dinonaktifkan kapan saja.',
+              );
+              if (!ok || !context.mounted) return;
+              final created = await ref.read(sampleProductsViewModelProvider.notifier).addCafeSamples();
+              if (!context.mounted) return;
+              showMessage(
+                context,
+                created == null
+                    ? '${ref.read(sampleProductsViewModelProvider).error}'
+                    : '$created produk contoh ditambahkan',
+                isError: created == null,
+              );
+            },
     );
   }
 }

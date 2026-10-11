@@ -81,33 +81,38 @@ class AppShell extends ConsumerWidget {
 
     final drawer = ListenableBuilder(
       listenable: routeInfo,
-      builder: (context, _) => NavigationDrawer(
-        selectedIndex: _selected(items, routeInfo.value.uri.path),
-        onDestinationSelected: (i) {
-          if (!wide) shellScaffoldKey.currentState?.closeDrawer();
-          context.go(items[i].path);
-        },
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(28, 20, 16, 4),
-            child: Text(user.displayName, style: Theme.of(context).textTheme.titleMedium),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(28, 0, 16, 12),
-            child: Text(user.role.label, style: Theme.of(context).textTheme.bodySmall),
-          ),
-          for (final item in items) NavigationDrawerDestination(icon: Icon(item.icon), label: Text(item.label)),
-          const Divider(indent: 28, endIndent: 28),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: ListTile(
-              leading: Icon(AppConfig.demoMode ? Icons.swap_horiz : Icons.logout),
-              title: Text(AppConfig.demoMode ? 'Ganti role' : 'Keluar'),
-              onTap: () => ref.read(authViewModelProvider.notifier).signOut(),
+      builder: (context, _) {
+        final selected = _selected(items, routeInfo.value.uri.path);
+        // Key per pilihan: indikator langsung pindah walau perubahan datang dari URL.
+        return NavigationDrawer(
+          key: ValueKey(selected),
+          selectedIndex: selected,
+          onDestinationSelected: (i) {
+            if (!wide) shellScaffoldKey.currentState?.closeDrawer();
+            context.go(items[i].path);
+          },
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 20, 16, 4),
+              child: Text(user.displayName, style: Theme.of(context).textTheme.titleMedium),
             ),
-          ),
-        ],
-      ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(28, 0, 16, 12),
+              child: Text(user.role.label, style: Theme.of(context).textTheme.bodySmall),
+            ),
+            for (final item in items) NavigationDrawerDestination(icon: Icon(item.icon), label: Text(item.label)),
+            const Divider(indent: 28, endIndent: 28),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: ListTile(
+                leading: Icon(AppConfig.demoMode ? Icons.swap_horiz : Icons.logout),
+                title: Text(AppConfig.demoMode ? 'Ganti role' : 'Keluar'),
+                onTap: () => ref.read(authViewModelProvider.notifier).signOut(),
+              ),
+            ),
+          ],
+        );
+      },
     );
 
     if (wide) {

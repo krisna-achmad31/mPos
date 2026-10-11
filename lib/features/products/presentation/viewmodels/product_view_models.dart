@@ -5,6 +5,9 @@ import '../../../../core/viewmodel/action_view_model.dart';
 import '../../../auth/auth_providers.dart';
 import '../../domain/entities/product.dart';
 import '../../product_providers.dart';
+import '../../../reports/domain/demo_catalog.dart';
+import '../../../stock/domain/entities/stock_receipt.dart';
+import '../../../stock/stock_providers.dart';
 
 /// Kata kunci pencarian di daftar produk.
 class ProductSearchViewModel extends Notifier<String> {
@@ -54,3 +57,41 @@ class ProductFormViewModel extends ActionViewModel {
 
 final productFormViewModelProvider =
     NotifierProvider<ProductFormViewModel, AsyncValue<void>>(ProductFormViewModel.new);
+
+/// Memasukkan katalog contoh distributor cafe ke produk asli, beserta stok awalnya.
+class SampleProductsViewModel extends ActionViewModel {
+  /// Mengembalikan jumlah produk yang ditambahkan.
+  Future<int?> addCafeSamples() async {
+    var created = 0;
+    final ok = await run(() async {
+      final user = ref.read(currentUserProvider);
+      final seeds = DemoCatalog.seedProducts;
+      created = await ref
+          .read(productRepositoryProvider)
+          .createProductsIfMissing([for (final s in seeds) (product: s.product, buyPrice: s.buyPrice)]);
+      if (created == 0) throw const AppException('Produk contoh cafe sudah ada semua.');
+      await ref.read(stockRepositoryProvider).createReceipt(
+            StockReceipt(
+              id: '',
+              supplier: 'Stok awal (produk contoh)',
+              docNo: 'CONTOH-CAFE',
+              date: DateTime.now(),
+              items: [
+                for (final s in seeds)
+                  StockReceiptItem(
+                    productId: s.product.id,
+                    productName: s.product.name,
+                    qty: s.initialStock,
+                    buyPrice: s.buyPrice,
+                  ),
+              ],
+            ),
+            user,
+          );
+    });
+    return ok ? created : null;
+  }
+}
+
+final sampleProductsViewModelProvider =
+    NotifierProvider<SampleProductsViewModel, AsyncValue<void>>(SampleProductsViewModel.new);

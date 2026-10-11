@@ -43,6 +43,16 @@ abstract final class DemoCatalog {
 
   static final Map<String, int> hpp = {for (final i in _items) i.$1: i.$6};
 
+  /// Versi untuk dimasukkan ke produk asli: stok dihitung, dengan stok minimum & stok awal.
+  static List<({Product product, int buyPrice, int initialStock})> get seedProducts => [
+        for (final p in products)
+          (
+            product: p.copyWith(trackStock: true, minStock: p.sellPrice >= 100000 ? 3 : 10),
+            buyPrice: hpp[p.id]!,
+            initialStock: p.sellPrice >= 100000 ? 12 : 48,
+          ),
+      ];
+
   /// Pelanggan contoh (nama fiktif).
   static const customers = [
     'Kopi Senja Sore',

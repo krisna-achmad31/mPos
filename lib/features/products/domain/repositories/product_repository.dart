@@ -14,4 +14,8 @@ abstract interface class ProductRepository {
   Future<String> saveProduct(Product product, {required int buyPrice, required String userId});
 
   Future<void> setActive(String id, bool active);
+
+  /// Membuat produk dengan id tetap (stok 0). Mengembalikan jumlah produk baru;
+  /// produk yang id-nya sudah ada dilewati.
+  Future<int> createProductsIfMissing(List<({Product product, int buyPrice})> items);
 }
