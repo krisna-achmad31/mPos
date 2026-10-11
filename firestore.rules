@@ -112,6 +112,11 @@ service cloud.firestore {
       allow write: if isOwner();
     }
 
+    // Data contoh MODE DEMO laporan (terpisah dari nota asli).
+    match /demo_days/{id} {
+      allow read, write: if isOwner();
+    }
+
     match /audit_logs/{id} {
       allow read: if isOwner();
       allow create: if active() && request.resource.data.userId == request.auth.uid;

@@ -17,4 +17,7 @@ abstract final class Collections {
   static const counters = 'counters';
   static const settings = 'settings';
   static const auditLogs = 'audit_logs';
+
+  /// Data contoh MODE DEMO laporan; tidak pernah dicampur dengan nota asli.
+  static const demoDays = 'demo_days';
 }
