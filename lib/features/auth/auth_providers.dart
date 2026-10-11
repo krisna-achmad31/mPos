@@ -1,13 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/firebase/firebase_providers.dart';
+import 'data/repositories/demo_auth_repository.dart';
 import 'data/repositories/firebase_auth_repository.dart';
 import 'domain/entities/app_user.dart';
 import 'domain/entities/user_role.dart';
 import 'domain/repositories/auth_repository.dart';
 
+final demoAuthRepositoryProvider = Provider<DemoAuthRepository>(
+  (ref) => DemoAuthRepository(ref.watch(firestoreProvider)),
+);
+
 final authRepositoryProvider = Provider<AuthRepository>(
-  (ref) => FirebaseAuthRepository(ref.watch(firebaseAuthProvider), ref.watch(firestoreProvider)),
+  (ref) => AppConfig.demoMode
+      ? ref.watch(demoAuthRepositoryProvider)
+      : FirebaseAuthRepository(ref.watch(firebaseAuthProvider), ref.watch(firestoreProvider)),
 );
 
 final userRepositoryProvider = Provider<UserRepository>(

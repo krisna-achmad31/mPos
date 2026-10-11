@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../features/auth/auth_providers.dart';
 import '../../features/auth/domain/entities/user_role.dart';
 import '../../features/auth/presentation/viewmodels/auth_view_model.dart';
+import '../config/app_config.dart';
 
 class NavItem {
   const NavItem(this.label, this.icon, this.path);
@@ -97,8 +98,8 @@ class AppShell extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Keluar'),
+            leading: Icon(AppConfig.demoMode ? Icons.swap_horiz : Icons.logout),
+            title: Text(AppConfig.demoMode ? 'Ganti role' : 'Keluar'),
             onTap: () => ref.read(authViewModelProvider.notifier).signOut(),
           ),
         ),

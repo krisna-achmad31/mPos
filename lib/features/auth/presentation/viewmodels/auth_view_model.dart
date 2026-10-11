@@ -26,6 +26,9 @@ class AuthViewModel extends ActionViewModel {
             password: password,
           ));
 
+  /// Mode demo: masuk tanpa login sebagai role terpilih.
+  Future<bool> selectRole(UserRole role) => run(() => ref.read(demoAuthRepositoryProvider).selectRole(role));
+
   Future<bool> resetPassword(String email) =>
       run(() => ref.read(authRepositoryProvider).sendPasswordReset(email));
 

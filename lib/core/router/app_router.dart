@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/auth_providers.dart';
+import '../config/app_config.dart';
 import '../../features/auth/domain/entities/app_user.dart';
 import '../../features/auth/domain/entities/user_role.dart';
 import '../../features/auth/presentation/viewmodels/auth_view_model.dart';
 import '../../features/auth/presentation/views/login_view.dart';
 import '../../features/auth/presentation/views/register_view.dart';
+import '../../features/auth/presentation/views/role_picker_view.dart';
 import '../../features/auth/presentation/views/users_view.dart';
 import '../../features/catalog/presentation/views/cart_view.dart';
 import '../../features/catalog/presentation/views/catalog_view.dart';
@@ -73,7 +75,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) => resolveRedirect(auth.value, state.matchedLocation),
     routes: [
       GoRoute(path: '/splash', builder: (_, _) => const Scaffold(body: Center(child: CircularProgressIndicator()))),
-      GoRoute(path: '/login', builder: (_, _) => const LoginView()),
+      GoRoute(
+        path: '/login',
+        builder: (_, _) => AppConfig.demoMode ? const RolePickerView() : const LoginView(),
+      ),
       GoRoute(path: '/register', builder: (_, _) => const RegisterView()),
       GoRoute(path: '/inactive', builder: (_, _) => const _InactiveView()),
       shell([
