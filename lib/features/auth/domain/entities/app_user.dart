@@ -8,6 +8,7 @@ class AppUser extends Equatable {
     required this.name,
     required this.email,
     required this.role,
+    this.distributorId = '',
     this.active = true,
     this.storeName = '',
     this.phone = '',
@@ -18,6 +19,9 @@ class AppUser extends Equatable {
   final String name;
   final String email;
   final UserRole role;
+
+  /// Distributor tempat akun ini bekerja / berbelanja. Semua data dibaca dari sini.
+  final String distributorId;
   final bool active;
 
   // Data toko, hanya relevan untuk Customer.
@@ -31,5 +35,5 @@ class AppUser extends Equatable {
   String get displayName => storeName.isNotEmpty ? storeName : name;
 
   @override
-  List<Object?> get props => [uid, name, email, role, active, storeName, phone, address];
+  List<Object?> get props => [uid, name, email, role, distributorId, active, storeName, phone, address];
 }

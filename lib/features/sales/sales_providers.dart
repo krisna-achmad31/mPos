@@ -8,7 +8,7 @@ import 'domain/entities/sales_order.dart';
 import 'domain/repositories/sales_repository.dart';
 
 final salesRepositoryProvider = Provider<SalesRepository>(
-  (ref) => FirestoreSalesRepository(ref.watch(firestoreProvider), ref.watch(clockProvider)),
+  (ref) => FirestoreSalesRepository(ref.watch(tenantStoreProvider), ref.watch(clockProvider)),
 );
 
 /// Owner melihat semua pesanan; Customer hanya miliknya.

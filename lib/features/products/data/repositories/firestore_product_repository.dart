@@ -4,14 +4,17 @@ import '../../../../core/firebase/collections.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../models/product_model.dart';
+import '../../../../core/firebase/tenant_store.dart';
 
 class FirestoreProductRepository implements ProductRepository {
-  FirestoreProductRepository(this._db);
+  FirestoreProductRepository(this._store);
 
-  final FirebaseFirestore _db;
+  final TenantStore _store;
 
-  CollectionReference<Map<String, dynamic>> get _products => _db.collection(Collections.products);
-  CollectionReference<Map<String, dynamic>> get _costs => _db.collection(Collections.productCosts);
+  FirebaseFirestore get _db => _store.db;
+
+  CollectionReference<Map<String, dynamic>> get _products => _store.col(Collections.products);
+  CollectionReference<Map<String, dynamic>> get _costs => _store.col(Collections.productCosts);
 
   @override
   Stream<List<Product>> watchProducts({bool activeOnly = false}) {
@@ -61,7 +64,7 @@ class FirestoreProductRepository implements ProductRepository {
       batch.update(ref, {...ProductModel.toEditableMap(product), 'updatedAt': FieldValue.serverTimestamp()});
       batch.set(_costs.doc(ref.id), {'buyPrice': buyPrice}, SetOptions(merge: true));
       if (oldPrice != product.sellPrice) {
-        batch.set(_db.collection(Collections.priceHistory).doc(), {
+        batch.set(_store.col(Collections.priceHistory).doc(), {
           'productId': ref.id,
           'oldPrice': oldPrice,
           'newPrice': product.sellPrice,

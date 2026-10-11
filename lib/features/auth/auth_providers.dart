@@ -2,6 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/firebase/firebase_providers.dart';
+import '../../core/firebase/tenant_store.dart';
+import '../distributors/data/firestore_distributor_repository.dart';
+import '../distributors/domain/distributor.dart';
 import 'data/repositories/demo_auth_repository.dart';
 import 'data/repositories/firebase_auth_repository.dart';
 import 'domain/entities/app_user.dart';
@@ -33,10 +36,27 @@ final currentUserProvider = Provider<AppUser>((ref) {
   return user;
 });
 
-final customersProvider = StreamProvider<List<AppUser>>(
-  (ref) => ref.watch(userRepositoryProvider).watchUsers(role: UserRole.customer),
+/// Semua data bisnis dibaca dari distributor milik akun yang login.
+final tenantStoreProvider = Provider<TenantStore>(
+  (ref) => TenantStore(ref.watch(firestoreProvider), ref.watch(currentUserProvider).distributorId),
 );
 
-final allUsersProvider = StreamProvider<List<AppUser>>(
-  (ref) => ref.watch(userRepositoryProvider).watchUsers(),
+final distributorRepositoryProvider = Provider<DistributorRepository>(
+  (ref) => FirestoreDistributorRepository(ref.watch(firestoreProvider)),
 );
+
+final distributorsProvider = StreamProvider<List<Distributor>>(
+  (ref) => ref.watch(distributorRepositoryProvider).watchAll(),
+);
+
+final currentDistributorProvider = StreamProvider<Distributor?>(
+  (ref) => ref.watch(distributorRepositoryProvider).watch(ref.watch(currentUserProvider).distributorId),
+);
+
+/// Pelanggan milik distributor ini saja.
+final customersProvider = StreamProvider<List<AppUser>>((ref) => ref
+    .watch(userRepositoryProvider)
+    .watchUsers(distributorId: ref.watch(currentUserProvider).distributorId, role: UserRole.customer));
+
+final allUsersProvider = StreamProvider<List<AppUser>>((ref) =>
+    ref.watch(userRepositoryProvider).watchUsers(distributorId: ref.watch(currentUserProvider).distributorId));

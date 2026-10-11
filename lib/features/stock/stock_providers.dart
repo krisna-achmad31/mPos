@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/firebase/firebase_providers.dart';
 import '../auth/auth_providers.dart';
 import 'data/repositories/firestore_stock_repository.dart';
 import 'domain/entities/change_request.dart';
@@ -8,7 +7,7 @@ import 'domain/entities/stock_receipt.dart';
 import 'domain/repositories/stock_repository.dart';
 
 final stockRepositoryProvider = Provider<StockRepository>(
-  (ref) => FirestoreStockRepository(ref.watch(firestoreProvider)),
+  (ref) => FirestoreStockRepository(ref.watch(tenantStoreProvider)),
 );
 
 /// Owner melihat semua dokumen; SPV hanya miliknya.

@@ -4,6 +4,7 @@ import '../../../../core/error/app_exception.dart';
 import '../../../../core/firebase/audit.dart';
 import '../../../../core/firebase/collections.dart';
 import '../../../../core/firebase/firestore_parsing.dart';
+import '../../../../core/firebase/tenant_store.dart';
 import '../../../auth/domain/entities/app_user.dart';
 import '../../domain/entities/cart_line.dart';
 import '../../domain/entities/invoice.dart';
@@ -14,17 +15,19 @@ import '../../domain/services/sale_calculator.dart';
 import '../models/sales_models.dart';
 
 class FirestoreSalesRepository implements SalesRepository {
-  FirestoreSalesRepository(this._db, this._now);
+  FirestoreSalesRepository(this._store, this._now);
 
-  final FirebaseFirestore _db;
+  final TenantStore _store;
+
+  FirebaseFirestore get _db => _store.db;
   final DateTime Function() _now;
 
-  CollectionReference<Map<String, dynamic>> get _products => _db.collection(Collections.products);
-  CollectionReference<Map<String, dynamic>> get _costs => _db.collection(Collections.productCosts);
-  CollectionReference<Map<String, dynamic>> get _orders => _db.collection(Collections.orders);
-  CollectionReference<Map<String, dynamic>> get _invoices => _db.collection(Collections.invoices);
-  CollectionReference<Map<String, dynamic>> get _invoiceCosts => _db.collection(Collections.invoiceCosts);
-  CollectionReference<Map<String, dynamic>> get _payments => _db.collection(Collections.payments);
+  CollectionReference<Map<String, dynamic>> get _products => _store.col(Collections.products);
+  CollectionReference<Map<String, dynamic>> get _costs => _store.col(Collections.productCosts);
+  CollectionReference<Map<String, dynamic>> get _orders => _store.col(Collections.orders);
+  CollectionReference<Map<String, dynamic>> get _invoices => _store.col(Collections.invoices);
+  CollectionReference<Map<String, dynamic>> get _invoiceCosts => _store.col(Collections.invoiceCosts);
+  CollectionReference<Map<String, dynamic>> get _payments => _store.col(Collections.payments);
 
   // ---------------------------------------------------------------- Pesanan
 
@@ -55,7 +58,7 @@ class FirestoreSalesRepository implements SalesRepository {
       for (final entry in _qtyByProduct(lines).entries) {
         if (!stock.containsKey(entry.key)) continue;
         tx.update(_products.doc(entry.key), {'stock': stock[entry.key]!.qty - entry.value});
-        writeStockMovement(_db, tx,
+        writeStockMovement(_store, tx,
             productId: entry.key,
             type: 'reserve',
             qty: -entry.value,
@@ -139,7 +142,7 @@ class FirestoreSalesRepository implements SalesRepository {
       for (final entry in _qtyByProduct(order.lines).entries) {
         if (!stock.containsKey(entry.key)) continue;
         tx.update(_products.doc(entry.key), {'stock': stock[entry.key]!.qty + entry.value});
-        writeStockMovement(_db, tx,
+        writeStockMovement(_store, tx,
             productId: entry.key,
             type: 'release',
             qty: entry.value,
@@ -159,7 +162,7 @@ class FirestoreSalesRepository implements SalesRepository {
         tx.update(_invoiceCosts.doc(invoiceId), {'voided': true});
       }
       if (by.isOwner) {
-        writeAudit(_db, tx,
+        writeAudit(_store, tx,
             userId: by.uid,
             userName: by.name,
             action: 'cancel',
@@ -199,7 +202,7 @@ class FirestoreSalesRepository implements SalesRepository {
       for (final entry in _qtyByProduct(pricedLines).entries) {
         if (!stock.containsKey(entry.key)) continue;
         tx.update(_products.doc(entry.key), {'stock': stock[entry.key]!.qty - entry.value});
-        writeStockMovement(_db, tx,
+        writeStockMovement(_store, tx,
             productId: entry.key,
             type: 'out',
             qty: -entry.value,
@@ -225,7 +228,7 @@ class FirestoreSalesRepository implements SalesRepository {
         _writePayment(tx, invoiceRef.id, customerId, payment.paid, method, by);
       }
       if (pricedLines.any((l) => l.priceType.name == 'manual')) {
-        writeAudit(_db, tx,
+        writeAudit(_store, tx,
             userId: by.uid,
             userName: by.name,
             action: 'manual_price',
@@ -350,7 +353,7 @@ class FirestoreSalesRepository implements SalesRepository {
 
   Future<String> _nextNumber(Transaction tx, DateTime now) async {
     final key = InvoiceNumber.dayKey(now);
-    final ref = _db.collection(Collections.counters).doc('invoice-$key');
+    final ref = _store.col(Collections.counters).doc('invoice-$key');
     final snap = await tx.get(ref);
     final next = readInt(snap.data()?['seq']) + 1;
     tx.set(ref, {'seq': next});

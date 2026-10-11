@@ -20,7 +20,8 @@ class DiscountFormDialog extends ConsumerStatefulWidget {
 }
 
 class _DiscountFormDialogState extends ConsumerState<DiscountFormDialog> {
-  late final _name = TextEditingController(text: widget.initial?.name);
+  static const _all = '__all__';
+
   late final _value = TextEditingController(
       text: widget.initial == null ? '' : widget.initial!.value.toStringAsFixed(widget.initial!.value % 1 == 0 ? 0 : 1));
   late DiscountKind _kind = widget.initial?.kind ?? DiscountKind.special;
@@ -34,7 +35,6 @@ class _DiscountFormDialogState extends ConsumerState<DiscountFormDialog> {
 
   @override
   void dispose() {
-    _name.dispose();
     _value.dispose();
     super.dispose();
   }
@@ -50,19 +50,29 @@ class _DiscountFormDialogState extends ConsumerState<DiscountFormDialog> {
     setState(() => isStart ? _start = picked : _end = picked.add(const Duration(days: 1)));
   }
 
+  /// Nama dibuat otomatis dari pilihan, jadi tidak perlu diketik.
+  String _autoName(String productName, String customerName) {
+    final product = productName.isEmpty ? 'semua produk' : productName;
+    return _kind == DiscountKind.special
+        ? 'Harga khusus ${customerName.isEmpty ? '-' : customerName} · $product'
+        : 'Promo $product${customerName.isEmpty ? '' : ' · $customerName'}';
+  }
+
   Future<void> _save() async {
     final products = ref.read(activeProductsProvider).value ?? [];
     final customers = ref.read(customersProvider).value ?? [];
+    final productName = products.where((p) => p.id == _productId).firstOrNull?.name ?? '';
+    final customerName = customers.where((c) => c.uid == _customerId).firstOrNull?.displayName ?? '';
     final discount = Discount(
       id: widget.initial?.id ?? '',
-      name: _name.text.trim(),
+      name: _autoName(productName, customerName),
       kind: _kind,
       type: _type,
       value: double.tryParse(_value.text.replaceAll(',', '.')) ?? 0,
       productId: _productId,
-      productName: products.where((p) => p.id == _productId).firstOrNull?.name ?? '',
+      productName: productName,
       customerId: _customerId,
-      customerName: customers.where((c) => c.uid == _customerId).firstOrNull?.displayName ?? '',
+      customerName: customerName,
       visibleInCatalog: _visible,
       start: _start,
       end: _end,
@@ -100,7 +110,10 @@ class _DiscountFormDialogState extends ConsumerState<DiscountFormDialog> {
                   ButtonSegment(value: DiscountKind.promo, label: Text('Promo')),
                 ],
                 selected: {_kind},
-                onSelectionChanged: (s) => setState(() => _kind = s.first),
+                onSelectionChanged: (s) => setState(() {
+                  _kind = s.first;
+                  if (_kind == DiscountKind.special) _visible = false;
+                }),
               ),
               Text(
                 isPromo
@@ -108,7 +121,6 @@ class _DiscountFormDialogState extends ConsumerState<DiscountFormDialog> {
                     : 'Katalog customer tetap menampilkan harga normal; potongan baru terlihat di invoice.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
-              TextField(controller: _name, decoration: const InputDecoration(labelText: 'Nama')),
               Row(
                 spacing: 12,
                 children: [
@@ -132,25 +144,42 @@ class _DiscountFormDialogState extends ConsumerState<DiscountFormDialog> {
                   ),
                 ],
               ),
-              DropdownButtonFormField<String?>(
-                initialValue: _customerId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Customer'),
-                items: [
-                  if (isPromo) const DropdownMenuItem(value: null, child: Text('Semua customer')),
-                  for (final c in customers) DropdownMenuItem(value: c.uid, child: Text(c.displayName)),
+              DropdownMenu<String>(
+                key: ValueKey('customer-$_kind'),
+                expandedInsets: EdgeInsets.zero,
+                enableFilter: true,
+                requestFocusOnTap: true,
+                leadingIcon: const Icon(Icons.storefront_outlined),
+                label: Text(isPromo ? 'Pelanggan (opsional)' : 'Pelanggan *'),
+                helperText: isPromo ? null : 'Hanya pelanggan ini yang mendapat harga khusus',
+                initialSelection: _customerId ?? (isPromo ? _all : null),
+                dropdownMenuEntries: [
+                  if (isPromo) const DropdownMenuEntry(value: _all, label: 'Semua pelanggan'),
+                  for (final c in customers) DropdownMenuEntry(value: c.uid, label: c.displayName),
                 ],
-                onChanged: (v) => setState(() => _customerId = v),
+                onSelected: (v) => setState(() => _customerId = v == null || v == _all ? null : v),
               ),
-              DropdownButtonFormField<String?>(
-                initialValue: _productId,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Produk'),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('Semua produk')),
-                  for (final p in products) DropdownMenuItem(value: p.id, child: Text(p.name)),
+              DropdownMenu<String>(
+                expandedInsets: EdgeInsets.zero,
+                enableFilter: true,
+                requestFocusOnTap: true,
+                menuHeight: 320,
+                leadingIcon: const Icon(Icons.inventory_2_outlined),
+                label: const Text('Produk'),
+                helperText: 'Ketik untuk mencari dari daftar produk',
+                initialSelection: _productId ?? _all,
+                dropdownMenuEntries: [
+                  const DropdownMenuEntry(value: _all, label: 'Semua produk'),
+                  for (final p in products) DropdownMenuEntry(value: p.id, label: p.name),
                 ],
-                onChanged: (v) => setState(() => _productId = v),
+                onSelected: (v) => setState(() => _productId = v == null || v == _all ? null : v),
+              ),
+              Text(
+                'Nama: ${_autoName(
+                  products.where((p) => p.id == _productId).firstOrNull?.name ?? '',
+                  customers.where((c) => c.uid == _customerId).firstOrNull?.displayName ?? '',
+                )}',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
               Row(
                 spacing: 8,

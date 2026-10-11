@@ -1,10 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'collections.dart';
+import 'tenant_store.dart';
 
 /// Menulis log audit di dalam transaksi yang sama dengan perubahannya.
 void writeAudit(
-  FirebaseFirestore db,
+  TenantStore store,
   Transaction tx, {
   required String userId,
   required String userName,
@@ -14,7 +15,7 @@ void writeAudit(
   Object? before,
   Object? after,
 }) {
-  tx.set(db.collection(Collections.auditLogs).doc(), {
+  tx.set(store.col(Collections.auditLogs).doc(), {
     'userId': userId,
     'userName': userName,
     'action': action,
@@ -28,7 +29,7 @@ void writeAudit(
 
 /// Mutasi stok: setiap perubahan stok punya satu baris di sini.
 void writeStockMovement(
-  FirebaseFirestore db,
+  TenantStore store,
   Transaction tx, {
   required String productId,
   required String type,
@@ -37,7 +38,7 @@ void writeStockMovement(
   required String refId,
   required String userId,
 }) {
-  tx.set(db.collection(Collections.stockMovements).doc(), {
+  tx.set(store.col(Collections.stockMovements).doc(), {
     'productId': productId,
     'type': type,
     'qty': qty,

@@ -3,13 +3,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/firebase/collections.dart';
 import '../../../core/firebase/firestore_parsing.dart';
 import '../domain/expense.dart';
+import '../../../core/firebase/tenant_store.dart';
 
 class FirestoreExpenseRepository implements ExpenseRepository {
-  FirestoreExpenseRepository(this._db);
+  FirestoreExpenseRepository(this._store);
 
-  final FirebaseFirestore _db;
+  final TenantStore _store;
 
-  CollectionReference<Map<String, dynamic>> get _col => _db.collection(Collections.expenses);
+  CollectionReference<Map<String, dynamic>> get _col => _store.col(Collections.expenses);
 
   @override
   Stream<List<Expense>> watchBetween(DateTime from, DateTime to) => _col

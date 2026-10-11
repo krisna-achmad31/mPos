@@ -1,5 +1,9 @@
 /// Nama koleksi Firestore di satu tempat agar repository dan rules konsisten.
 abstract final class Collections {
+  /// Top-level: satu dokumen per distributor; data bisnisnya di subkoleksi.
+  static const distributors = 'distributors';
+
+  /// Top-level: profil akun + distributorId + role.
   static const users = 'users';
   static const products = 'products';
   static const productCosts = 'product_costs';

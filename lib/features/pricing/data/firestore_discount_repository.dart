@@ -4,13 +4,14 @@ import '../../../core/firebase/collections.dart';
 import '../../../core/firebase/firestore_parsing.dart';
 import '../domain/entities/discount.dart';
 import '../domain/repositories/discount_repository.dart';
+import '../../../core/firebase/tenant_store.dart';
 
 class FirestoreDiscountRepository implements DiscountRepository {
-  FirestoreDiscountRepository(this._db);
+  FirestoreDiscountRepository(this._store);
 
-  final FirebaseFirestore _db;
+  final TenantStore _store;
 
-  CollectionReference<Map<String, dynamic>> get _col => _db.collection(Collections.discounts);
+  CollectionReference<Map<String, dynamic>> get _col => _store.col(Collections.discounts);
 
   Discount _fromMap(String id, Map<String, dynamic> m) => Discount(
         id: id,

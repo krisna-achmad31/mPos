@@ -7,6 +7,7 @@ import '../../domain/entities/app_user.dart';
 import '../../domain/entities/user_role.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../models/app_user_model.dart';
+import '../../../distributors/data/firestore_distributor_repository.dart';
 
 class FirebaseAuthRepository implements AuthRepository {
   FirebaseAuthRepository(this._auth, this._db);
@@ -34,7 +35,45 @@ class FirebaseAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<void> registerDistributor({
+    required String ownerName,
+    required String distributorName,
+    required String phone,
+    required String email,
+    required String password,
+  }) async {
+    if (distributorName.trim().isEmpty) throw const AppException('Nama distributor wajib diisi.');
+    try {
+      final credential = await _auth.createUserWithEmailAndPassword(email: email.trim(), password: password);
+      final uid = credential.user!.uid;
+      final distributorRef = _db.collection(Collections.distributors).doc();
+      final user = AppUser(
+        uid: uid,
+        name: ownerName.trim(),
+        email: email.trim(),
+        role: UserRole.owner,
+        distributorId: distributorRef.id,
+        phone: phone.trim(),
+      );
+      // Satu batch: distributor + profil Owner dibuat bersamaan (rules memeriksa keduanya).
+      await (_db.batch()
+            ..set(distributorRef,
+                FirestoreDistributorRepository.newDistributorMap(name: distributorName, ownerUid: uid, phone: phone))
+            ..set(distributorRef.collection(Collections.settings).doc('store'),
+                FirestoreDistributorRepository.initialSettingsMap(distributorName))
+            ..set(_db.collection(Collections.users).doc(uid), {
+              ...AppUserModel.toMap(user),
+              'createdAt': FieldValue.serverTimestamp(),
+            }))
+          .commit();
+    } on FirebaseAuthException catch (e) {
+      throw AppException(_message(e));
+    }
+  }
+
+  @override
   Future<void> registerCustomer({
+    required String distributorId,
     required String name,
     required String storeName,
     required String phone,
@@ -42,6 +81,7 @@ class FirebaseAuthRepository implements AuthRepository {
     required String email,
     required String password,
   }) async {
+    if (distributorId.isEmpty) throw const AppException('Pilih distributor terlebih dahulu.');
     try {
       final credential = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
@@ -52,6 +92,7 @@ class FirebaseAuthRepository implements AuthRepository {
         name: name.trim(),
         email: email.trim(),
         role: UserRole.customer,
+        distributorId: distributorId,
         storeName: storeName.trim(),
         phone: phone.trim(),
         address: address.trim(),
@@ -97,8 +138,8 @@ class FirestoreUserRepository implements UserRepository {
   CollectionReference<Map<String, dynamic>> get _users => _db.collection(Collections.users);
 
   @override
-  Stream<List<AppUser>> watchUsers({UserRole? role}) {
-    Query<Map<String, dynamic>> query = _users;
+  Stream<List<AppUser>> watchUsers({required String distributorId, UserRole? role}) {
+    Query<Map<String, dynamic>> query = _users.where('distributorId', isEqualTo: distributorId);
     if (role != null) query = query.where('role', isEqualTo: role.name);
     return query.snapshots().map((snap) {
       final users = snap.docs.map((d) => AppUserModel.fromMap(d.id, d.data())).toList();

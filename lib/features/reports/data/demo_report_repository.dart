@@ -7,6 +7,7 @@ import '../../../core/firebase/firestore_parsing.dart';
 import '../../sales/data/models/sales_models.dart';
 import '../../sales/domain/entities/invoice.dart';
 import '../domain/demo_invoice_editor.dart';
+import '../../../core/firebase/tenant_store.dart';
 
 /// Ringkasan satu hari data demo.
 class DemoDay {
@@ -19,11 +20,13 @@ class DemoDay {
 
 /// Data demo per hari, disimpan terpisah total dari koleksi nota asli.
 class DemoReportRepository {
-  DemoReportRepository(this._db);
+  DemoReportRepository(this._store);
 
-  final FirebaseFirestore _db;
+  final TenantStore _store;
 
-  CollectionReference<Map<String, dynamic>> get _col => _db.collection(Collections.demoDays);
+  FirebaseFirestore get _db => _store.db;
+
+  CollectionReference<Map<String, dynamic>> get _col => _store.col(Collections.demoDays);
 
   static String keyOf(DateTime d) => DateFormat('yyyyMMdd').format(d);
 

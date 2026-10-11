@@ -1,12 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/firebase/firebase_providers.dart';
+import '../auth/auth_providers.dart';
 import 'data/firestore_discount_repository.dart';
 import 'domain/entities/discount.dart';
 import 'domain/repositories/discount_repository.dart';
 
 final discountRepositoryProvider = Provider<DiscountRepository>(
-  (ref) => FirestoreDiscountRepository(ref.watch(firestoreProvider)),
+  (ref) => FirestoreDiscountRepository(ref.watch(tenantStoreProvider)),
 );
 
 /// Hanya untuk Owner.

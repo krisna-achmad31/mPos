@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/firebase/firebase_providers.dart';
 import '../../../../core/utils/dates.dart';
 import '../../../../core/viewmodel/action_view_model.dart';
 import '../../../auth/auth_providers.dart';
@@ -65,7 +64,7 @@ class ReportFilterViewModel extends Notifier<ReportFilter> {
 
 final reportFilterProvider = NotifierProvider<ReportFilterViewModel, ReportFilter>(ReportFilterViewModel.new);
 
-final demoReportRepositoryProvider = Provider((ref) => DemoReportRepository(ref.watch(firestoreProvider)));
+final demoReportRepositoryProvider = Provider((ref) => DemoReportRepository(ref.watch(tenantStoreProvider)));
 
 final _invoiceCostsProvider = StreamProvider.family<List<InvoiceCost>, DateTime>(
   (ref, month) => ref.watch(salesRepositoryProvider).watchInvoiceCosts(startOfMonth(month), startOfNextMonth(month)),

@@ -19,11 +19,42 @@ class ProductSearchViewModel extends Notifier<String> {
 
 final productSearchProvider = NotifierProvider<ProductSearchViewModel, String>(ProductSearchViewModel.new);
 
-/// Daftar produk yang sudah difilter pencarian, produk perlu order ulang di atas.
+/// Filter halaman Produk Owner: hanya yang perlu restock, dan/atau satu kategori.
+class ProductFilter {
+  const ProductFilter({this.restockOnly = false, this.category});
+
+  final bool restockOnly;
+  final String? category;
+}
+
+class ProductFilterViewModel extends Notifier<ProductFilter> {
+  @override
+  ProductFilter build() => const ProductFilter();
+
+  void toggleRestock() => state = ProductFilter(restockOnly: !state.restockOnly, category: state.category);
+
+  void setCategory(String? category) => state = ProductFilter(restockOnly: state.restockOnly, category: category);
+}
+
+final productFilterProvider = NotifierProvider<ProductFilterViewModel, ProductFilter>(ProductFilterViewModel.new);
+
+/// Kategori yang ada, urut abjad.
+final productCategoriesProvider = Provider<List<String>>((ref) {
+  final products = ref.watch(productsProvider).value ?? const [];
+  return products.map((p) => p.category).where((c) => c.isNotEmpty).toSet().toList()..sort();
+});
+
+/// Daftar produk setelah pencarian & filter; produk perlu restock selalu di atas.
 final filteredProductsProvider = Provider<AsyncValue<List<Product>>>((ref) {
   final query = ref.watch(productSearchProvider);
+  final filter = ref.watch(productFilterProvider);
   return ref.watch(productsProvider).whenData((products) {
-    final list = products.where((p) => p.matches(query)).toList();
+    final list = products
+        .where((p) =>
+            p.matches(query) &&
+            (!filter.restockOnly || (p.active && p.needsReorder)) &&
+            (filter.category == null || p.category == filter.category))
+        .toList();
     list.sort((a, b) {
       if (a.needsReorder != b.needsReorder) return a.needsReorder ? -1 : 1;
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());

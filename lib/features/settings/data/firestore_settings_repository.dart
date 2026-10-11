@@ -3,13 +3,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/firebase/collections.dart';
 import '../../../core/firebase/firestore_parsing.dart';
 import '../domain/store_settings.dart';
+import '../../../core/firebase/tenant_store.dart';
 
 class FirestoreSettingsRepository implements SettingsRepository {
-  FirestoreSettingsRepository(this._db);
+  FirestoreSettingsRepository(this._store);
 
-  final FirebaseFirestore _db;
+  final TenantStore _store;
 
-  DocumentReference<Map<String, dynamic>> get _doc => _db.collection(Collections.settings).doc('store');
+  DocumentReference<Map<String, dynamic>> get _doc => _store.col(Collections.settings).doc('store');
 
   @override
   Stream<StoreSettings> watch() => _doc.snapshots().map((snap) {

@@ -33,6 +33,25 @@ Aturan bisnis penting ada di `domain/services` dan dites tanpa Firebase:
 | `stock/domain/services/stock_calculator.dart` | HPP rata-rata tertimbang, selisih koreksi stok masuk |
 | `core/router/app_router.dart` → `resolveRedirect` | Hak akses halaman per role |
 
+## Multi-distributor
+
+Setiap distributor punya ruang data sendiri. Akun (`users/{uid}`) menyimpan `distributorId` + `role`,
+dan semua repository membaca/menulis lewat `TenantStore` (`lib/core/firebase/tenant_store.dart`):
+
+```
+distributors/{distributorId}            # nama, ownerUid
+  products, product_costs, stock_receipts, stock_movements, stock_opnames, change_requests,
+  discounts, orders, invoices, invoice_costs, payments, expenses, counters, settings,
+  demo_days, audit_logs
+users/{uid}                              # name, role, distributorId, active
+```
+
+- Daftar sebagai **distributor baru** → membuat distributor + menjadi Owner-nya.
+- Daftar sebagai **pelanggan** → memilih distributor tempat belanja.
+- `firestore.rules` membatasi akses ke data distributor milik akun sendiri.
+- Mode pilot (`AppConfig.demoMode = true`): pilih distributor (atau buat baru) lalu pilih role tanpa login;
+  tersedia 2 akun Customer uji per distributor. Data pilot lama dipindahkan ke distributor `pilot`.
+
 ## Fitur per role
 
 | Role | Halaman |

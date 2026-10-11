@@ -1,12 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/firebase/firebase_providers.dart';
+import '../auth/auth_providers.dart';
 import 'data/repositories/firestore_product_repository.dart';
 import 'domain/entities/product.dart';
 import 'domain/repositories/product_repository.dart';
 
 final productRepositoryProvider = Provider<ProductRepository>(
-  (ref) => FirestoreProductRepository(ref.watch(firestoreProvider)),
+  (ref) => FirestoreProductRepository(ref.watch(tenantStoreProvider)),
 );
 
 final productsProvider = StreamProvider<List<Product>>(

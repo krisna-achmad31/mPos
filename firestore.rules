@@ -1,125 +1,145 @@
 rules_version = '2';
 
-// Aturan akses per role: owner, spv, customer (field `role` di users/{uid}).
-// Catatan: stok diubah dari sisi klien di dalam transaksi. Untuk produksi,
-// pindahkan checkout & stok ke Cloud Functions agar customer tidak bisa
-// menulis field `stock` secara langsung.
+// Multi-distributor: setiap akun (users/{uid}) terikat ke satu distributorId + role.
+// Semua data bisnis ada di distributors/{d}/... dan hanya bisa diakses anggota distributor itu.
+// Dipakai saat login aktif (AppConfig.demoMode = false). Selama pilot tanpa login dipakai firestore.demo.rules.
+//
+// Catatan: stok diubah dari klien di dalam transaksi. Untuk produksi, pindahkan checkout & stok
+// ke Cloud Functions agar customer tidak bisa menulis field `stock` secara langsung.
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
     function profile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
     function active() { return signedIn() && profile().active == true; }
-    function role() { return profile().role; }
-    function isOwner() { return active() && role() == 'owner'; }
-    function isSpv() { return active() && role() == 'spv'; }
-    function isCustomer() { return active() && role() == 'customer'; }
+    function member(d) { return active() && profile().distributorId == d; }
+    function isOwner(d) { return member(d) && profile().role == 'owner'; }
+    function isSpv(d) { return member(d) && profile().role == 'spv'; }
+    function isCustomer(d) { return member(d) && profile().role == 'customer'; }
     function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
+    // Dipakai di batch pendaftaran distributor: distributor dibuat di batch yang sama.
+    function isNewOwner(d) {
+      return signedIn()
+        && getAfter(/databases/$(database)/documents/distributors/$(d)).data.ownerUid == request.auth.uid;
+    }
     function onlyChanges(keys) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
 
     match /users/{uid} {
-      allow read: if isSelf(uid) || isOwner();
-      // Pendaftaran mandiri selalu sebagai customer.
-      allow create: if isSelf(uid) && request.resource.data.role == 'customer';
-      allow update: if isOwner()
+      allow read: if isSelf(uid)
+        || (signedIn() && profile().role == 'owner' && resource.data.distributorId == profile().distributorId);
+      allow create: if isSelf(uid) && (
+        (request.resource.data.role == 'customer'
+          && exists(/databases/$(database)/documents/distributors/$(request.resource.data.distributorId)))
+        || (request.resource.data.role == 'owner' && isNewOwner(request.resource.data.distributorId))
+      );
+      // Owner mengatur role/status akun di distributornya sendiri, tanpa memindahkan distributor.
+      allow update: if (isOwner(resource.data.distributorId)
+            && request.resource.data.distributorId == resource.data.distributorId)
         || (isSelf(uid) && onlyChanges(['name', 'storeName', 'phone', 'address']));
     }
 
-    match /products/{id} {
-      allow read: if active();
-      allow create, delete: if isOwner();
-      // Stok berubah lewat transaksi stok masuk, checkout, dan pembatalan.
-      allow update: if isOwner()
-        || (active() && onlyChanges(['stock', 'updatedAt']) && request.resource.data.stock >= 0);
-    }
+    match /distributors/{d} {
+      // Nama distributor publik agar pelanggan bisa memilih saat mendaftar.
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isOwner(d) && request.resource.data.ownerUid == resource.data.ownerUid;
 
-    // Harga beli & HPP: tidak boleh terlihat customer.
-    match /product_costs/{id} {
-      allow read, write: if isOwner() || isSpv();
-    }
+      match /products/{id} {
+        allow read: if member(d);
+        allow create, delete: if isOwner(d);
+        // Stok berubah lewat transaksi stok masuk, checkout, dan pembatalan.
+        allow update: if isOwner(d)
+          || (member(d) && onlyChanges(['stock', 'updatedAt']) && request.resource.data.stock >= 0);
+      }
 
-    match /price_history/{id} {
-      allow read, write: if isOwner();
-    }
+      // Harga beli & HPP: tidak boleh terlihat customer.
+      match /product_costs/{id} {
+        allow read, write: if isOwner(d) || isSpv(d);
+      }
 
-    match /stock_receipts/{id} {
-      allow read: if isOwner() || (isSpv() && resource.data.createdBy == request.auth.uid);
-      allow create: if (isOwner() || isSpv()) && request.resource.data.createdBy == request.auth.uid;
-      allow update: if isOwner()
-        || (isSpv() && resource.data.createdBy == request.auth.uid
-            && onlyChanges(['status']) && request.resource.data.status == 'pending_change');
-    }
+      match /price_history/{id} {
+        allow read, write: if isOwner(d);
+      }
 
-    match /change_requests/{id} {
-      allow read: if isOwner() || (isSpv() && resource.data.requestedBy == request.auth.uid);
-      allow create: if isSpv() && request.resource.data.requestedBy == request.auth.uid
-        && request.resource.data.status == 'pending';
-      allow update: if isOwner();
-    }
+      match /stock_receipts/{id} {
+        allow read: if isOwner(d) || (isSpv(d) && resource.data.createdBy == request.auth.uid);
+        allow create: if (isOwner(d) || isSpv(d)) && request.resource.data.createdBy == request.auth.uid;
+        allow update: if isOwner(d)
+          || (isSpv(d) && resource.data.createdBy == request.auth.uid
+              && onlyChanges(['status']) && request.resource.data.status == 'pending_change');
+      }
 
-    match /stock_movements/{id} {
-      allow read: if isOwner();
-      allow create: if active() && request.resource.data.userId == request.auth.uid;
-    }
+      match /change_requests/{id} {
+        allow read: if isOwner(d) || (isSpv(d) && resource.data.requestedBy == request.auth.uid);
+        allow create: if isSpv(d) && request.resource.data.requestedBy == request.auth.uid
+          && request.resource.data.status == 'pending';
+        allow update: if isOwner(d);
+      }
 
-    match /stock_opnames/{id} {
-      allow read, write: if isOwner();
-    }
+      match /stock_movements/{id} {
+        allow read: if isOwner(d);
+        allow create: if member(d) && request.resource.data.userId == request.auth.uid;
+      }
 
-    // Harga khusus tersembunyi; customer hanya bisa membaca promo publik.
-    match /discounts/{id} {
-      allow read: if isOwner() || (active() && resource.data.visibleInCatalog == true);
-      allow write: if isOwner();
-    }
+      match /stock_opnames/{id} {
+        allow read, write: if isOwner(d);
+      }
 
-    match /orders/{id} {
-      allow read: if isOwner() || (isCustomer() && resource.data.customerId == request.auth.uid);
-      allow create: if isCustomer() && request.resource.data.customerId == request.auth.uid
-        && request.resource.data.status == 'pending';
-      allow update: if isOwner()
-        || (isCustomer() && resource.data.customerId == request.auth.uid
-            && resource.data.status == 'pending'
-            && request.resource.data.status == 'cancelled'
-            && onlyChanges(['status', 'cancelReason', 'cancelledBy', 'cancelledAt']));
-    }
+      // Harga khusus tersembunyi; customer hanya membaca promo publik.
+      match /discounts/{id} {
+        allow read: if isOwner(d) || (member(d) && resource.data.visibleInCatalog == true);
+        allow write: if isOwner(d);
+      }
 
-    match /invoices/{id} {
-      allow read: if isOwner() || (isCustomer() && resource.data.customerId == request.auth.uid);
-      allow write: if isOwner();
-    }
+      match /orders/{id} {
+        allow read: if isOwner(d) || (isCustomer(d) && resource.data.customerId == request.auth.uid);
+        allow create: if isCustomer(d) && request.resource.data.customerId == request.auth.uid
+          && request.resource.data.status == 'pending';
+        allow update: if isOwner(d)
+          || (isCustomer(d) && resource.data.customerId == request.auth.uid
+              && resource.data.status == 'pending'
+              && request.resource.data.status == 'cancelled'
+              && onlyChanges(['status', 'cancelReason', 'cancelledBy', 'cancelledAt']));
+      }
 
-    match /invoice_costs/{id} {
-      allow read, write: if isOwner();
-    }
+      match /invoices/{id} {
+        allow read: if isOwner(d) || (isCustomer(d) && resource.data.customerId == request.auth.uid);
+        allow write: if isOwner(d);
+      }
 
-    match /payments/{id} {
-      allow read: if isOwner() || (isCustomer() && resource.data.customerId == request.auth.uid);
-      allow create: if isOwner();
-    }
+      match /invoice_costs/{id} {
+        allow read, write: if isOwner(d);
+      }
 
-    match /expenses/{id} {
-      allow read, write: if isOwner();
-    }
+      match /payments/{id} {
+        allow read: if isOwner(d) || (isCustomer(d) && resource.data.customerId == request.auth.uid);
+        allow create: if isOwner(d);
+      }
 
-    match /counters/{id} {
-      allow read, write: if isOwner();
-    }
+      match /expenses/{id} {
+        allow read, write: if isOwner(d);
+      }
 
-    match /settings/{id} {
-      allow read: if active();
-      allow write: if isOwner();
-    }
+      match /counters/{id} {
+        allow read, write: if isOwner(d);
+      }
 
-    // Data contoh MODE DEMO laporan (terpisah dari nota asli).
-    match /demo_days/{id} {
-      allow read, write: if isOwner();
-    }
+      match /settings/{id} {
+        allow read: if member(d);
+        allow write: if isOwner(d) || isNewOwner(d);
+      }
 
-    match /audit_logs/{id} {
-      allow read: if isOwner();
-      allow create: if active() && request.resource.data.userId == request.auth.uid;
+      // Data contoh MODE DEMO laporan (terpisah dari nota asli).
+      match /demo_days/{id} {
+        allow read, write: if isOwner(d);
+      }
+
+      match /audit_logs/{id} {
+        allow read: if isOwner(d);
+        allow create: if member(d) && request.resource.data.userId == request.auth.uid;
+      }
     }
   }
 }

@@ -10,16 +10,19 @@ import '../../domain/entities/stock_receipt.dart';
 import '../../domain/repositories/stock_repository.dart';
 import '../../domain/services/stock_calculator.dart';
 import '../models/stock_models.dart';
+import '../../../../core/firebase/tenant_store.dart';
 
 class FirestoreStockRepository implements StockRepository {
-  FirestoreStockRepository(this._db);
+  FirestoreStockRepository(this._store);
 
-  final FirebaseFirestore _db;
+  final TenantStore _store;
 
-  CollectionReference<Map<String, dynamic>> get _receipts => _db.collection(Collections.stockReceipts);
-  CollectionReference<Map<String, dynamic>> get _products => _db.collection(Collections.products);
-  CollectionReference<Map<String, dynamic>> get _costs => _db.collection(Collections.productCosts);
-  CollectionReference<Map<String, dynamic>> get _requests => _db.collection(Collections.changeRequests);
+  FirebaseFirestore get _db => _store.db;
+
+  CollectionReference<Map<String, dynamic>> get _receipts => _store.col(Collections.stockReceipts);
+  CollectionReference<Map<String, dynamic>> get _products => _store.col(Collections.products);
+  CollectionReference<Map<String, dynamic>> get _costs => _store.col(Collections.productCosts);
+  CollectionReference<Map<String, dynamic>> get _requests => _store.col(Collections.changeRequests);
 
   @override
   Stream<List<StockReceipt>> watchReceipts({String? createdBy}) {
@@ -60,7 +63,7 @@ class FirestoreStockRepository implements StockRepository {
         );
         stock[item.productId] = stock[item.productId]! + item.qty;
         lastBuyPrice[item.productId] = item.buyPrice;
-        writeStockMovement(_db, tx,
+        writeStockMovement(_store, tx,
             productId: item.productId,
             type: 'in',
             qty: item.qty,
@@ -79,7 +82,7 @@ class FirestoreStockRepository implements StockRepository {
         'createdByName': by.name,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      writeAudit(_db, tx,
+      writeAudit(_store, tx,
           userId: by.uid,
           userName: by.name,
           action: 'create',
@@ -216,7 +219,7 @@ class FirestoreStockRepository implements StockRepository {
     return () {
       for (final entry in deltas.entries) {
         tx.update(_products.doc(entry.key), {'stock': stock[entry.key], 'updatedAt': FieldValue.serverTimestamp()});
-        writeStockMovement(_db, tx,
+        writeStockMovement(_store, tx,
             productId: entry.key,
             type: 'adjust',
             qty: entry.value,
@@ -232,7 +235,7 @@ class FirestoreStockRepository implements StockRepository {
         'status': 'active',
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      writeAudit(_db, tx,
+      writeAudit(_store, tx,
           userId: by.uid,
           userName: by.name,
           action: 'update',
@@ -256,7 +259,7 @@ class FirestoreStockRepository implements StockRepository {
       final snap = await tx.get(ref);
       final systemQty = readInt(snap.data()?['stock']);
       final diff = physicalQty - systemQty;
-      final opnameRef = _db.collection(Collections.stockOpnames).doc();
+      final opnameRef = _store.col(Collections.stockOpnames).doc();
 
       tx.set(opnameRef, {
         'productId': productId,
@@ -270,7 +273,7 @@ class FirestoreStockRepository implements StockRepository {
       });
       if (diff != 0) {
         tx.update(ref, {'stock': physicalQty, 'updatedAt': FieldValue.serverTimestamp()});
-        writeStockMovement(_db, tx,
+        writeStockMovement(_store, tx,
             productId: productId,
             type: 'opname',
             qty: diff,
@@ -278,7 +281,7 @@ class FirestoreStockRepository implements StockRepository {
             refId: opnameRef.id,
             userId: by.uid);
       }
-      writeAudit(_db, tx,
+      writeAudit(_store, tx,
           userId: by.uid,
           userName: by.name,
           action: 'opname',

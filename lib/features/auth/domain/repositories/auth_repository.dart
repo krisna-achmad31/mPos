@@ -7,8 +7,18 @@ abstract interface class AuthRepository {
 
   Future<void> signIn({required String email, required String password});
 
-  /// Pendaftaran mandiri, selalu sebagai Customer.
+  /// Distributor baru mendaftar: membuat ruang distributor dan menjadi Owner di sana.
+  Future<void> registerDistributor({
+    required String ownerName,
+    required String distributorName,
+    required String phone,
+    required String email,
+    required String password,
+  });
+
+  /// Pendaftaran pelanggan ke satu distributor.
   Future<void> registerCustomer({
+    required String distributorId,
     required String name,
     required String storeName,
     required String phone,
@@ -23,7 +33,8 @@ abstract interface class AuthRepository {
 }
 
 abstract interface class UserRepository {
-  Stream<List<AppUser>> watchUsers({UserRole? role});
+  /// Akun milik satu distributor saja.
+  Stream<List<AppUser>> watchUsers({required String distributorId, UserRole? role});
 
   Future<void> updateRole(String uid, UserRole role);
 

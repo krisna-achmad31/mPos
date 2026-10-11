@@ -1,12 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/firebase/firebase_providers.dart';
+import '../auth/auth_providers.dart';
 import '../../core/viewmodel/action_view_model.dart';
 import 'data/firestore_settings_repository.dart';
 import 'domain/store_settings.dart';
 
 final settingsRepositoryProvider = Provider<SettingsRepository>(
-  (ref) => FirestoreSettingsRepository(ref.watch(firestoreProvider)),
+  (ref) => FirestoreSettingsRepository(ref.watch(tenantStoreProvider)),
 );
 
 final storeSettingsProvider = StreamProvider<StoreSettings>(

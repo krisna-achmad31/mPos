@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/error/app_exception.dart';
-import '../../core/firebase/firebase_providers.dart';
 import '../../core/utils/dates.dart';
 import '../../core/viewmodel/action_view_model.dart';
 import '../auth/auth_providers.dart';
@@ -9,7 +8,7 @@ import 'data/firestore_expense_repository.dart';
 import 'domain/expense.dart';
 
 final expenseRepositoryProvider = Provider<ExpenseRepository>(
-  (ref) => FirestoreExpenseRepository(ref.watch(firestoreProvider)),
+  (ref) => FirestoreExpenseRepository(ref.watch(tenantStoreProvider)),
 );
 
 /// Pengeluaran dalam satu bulan (parameter: tanggal berapa pun di bulan itu).

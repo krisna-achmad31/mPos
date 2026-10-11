@@ -98,7 +98,10 @@ class AppShell extends ConsumerWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(28, 0, 16, 12),
-              child: Text(user.role.label, style: Theme.of(context).textTheme.bodySmall),
+              child: Text(
+                '${user.role.label} · ${ref.watch(currentDistributorProvider).value?.name ?? '…'}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
             for (final item in items) NavigationDrawerDestination(icon: Icon(item.icon), label: Text(item.label)),
             const Divider(indent: 28, endIndent: 28),

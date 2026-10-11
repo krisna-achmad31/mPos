@@ -98,7 +98,7 @@ class _LoginViewState extends ConsumerState<LoginView> {
                   const SizedBox(height: 12),
                   OutlinedButton(
                     onPressed: () => context.go('/register'),
-                    child: const Text('Daftar sebagai pelanggan'),
+                    child: const Text('Daftar (distributor / pelanggan)'),
                   ),
                 ],
               ),

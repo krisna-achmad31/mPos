@@ -8,3 +8,4 @@ final firebaseAuthProvider = Provider<FirebaseAuth>((ref) => FirebaseAuth.instan
 
 /// Bisa diganti di test agar waktu deterministik.
 final clockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
+
