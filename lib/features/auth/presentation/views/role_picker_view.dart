@@ -19,7 +19,21 @@ class RolePickerView extends ConsumerStatefulWidget {
 
 class _RolePickerViewState extends ConsumerState<RolePickerView> {
   Distributor? _distributor;
+  DateTime _stepChangedAt = DateTime(0);
   final _newName = TextEditingController();
+
+  /// Kartu role muncul di posisi kartu distributor: abaikan tap yang "tembus" sesaat setelah pindah langkah.
+  bool get _justSwitched => DateTime.now().difference(_stepChangedAt) < const Duration(milliseconds: 500);
+
+  void _pickDistributor(Distributor? d) => setState(() {
+        _distributor = d;
+        _stepChangedAt = DateTime.now();
+      });
+
+  void _selectRole(Distributor d, UserRole role, {int customer = 1}) {
+    if (_justSwitched) return;
+    ref.read(authViewModelProvider.notifier).selectRole(d, role, customer: customer);
+  }
 
   static const _descriptions = {
     UserRole.owner: 'Semua fitur: kasir, pesanan, produk, harga khusus, approval, laporan',
@@ -43,7 +57,7 @@ class _RolePickerViewState extends ConsumerState<RolePickerView> {
     final created = await ref.read(authViewModelProvider.notifier).createDistributor(_newName.text);
     if (created != null && mounted) {
       _newName.clear();
-      setState(() => _distributor = created);
+      _pickDistributor(created);
     }
   }
 
@@ -87,7 +101,7 @@ class _RolePickerViewState extends ConsumerState<RolePickerView> {
                               leading: CircleAvatar(child: Text(d.name.isEmpty ? '?' : d.name[0].toUpperCase())),
                               title: Text(d.name),
                               trailing: const Icon(Icons.chevron_right),
-                              onTap: () => setState(() => _distributor = d),
+                              onTap: () => _pickDistributor(d),
                             ),
                           ),
                       ],
@@ -117,7 +131,7 @@ class _RolePickerViewState extends ConsumerState<RolePickerView> {
                       title: Text(distributor.name),
                       subtitle: const Text('Distributor terpilih'),
                       trailing: TextButton(
-                        onPressed: () => setState(() => _distributor = null),
+                        onPressed: () => _pickDistributor(null),
                         child: const Text('Ganti'),
                       ),
                     ),
@@ -131,7 +145,7 @@ class _RolePickerViewState extends ConsumerState<RolePickerView> {
                         title: Text(role.label),
                         subtitle: Text(_descriptions[role]!),
                         trailing: const Icon(Icons.chevron_right),
-                        onTap: () => ref.read(authViewModelProvider.notifier).selectRole(distributor, role),
+                        onTap: () => _selectRole(distributor, role),
                       ),
                     ),
                   Card(
@@ -152,9 +166,7 @@ class _RolePickerViewState extends ConsumerState<RolePickerView> {
                             title: Text(DemoAuthRepository.demoCustomers[i - 1].store),
                             subtitle: Text(DemoAuthRepository.demoCustomers[i - 1].name),
                             trailing: const Icon(Icons.chevron_right),
-                            onTap: () => ref
-                                .read(authViewModelProvider.notifier)
-                                .selectRole(distributor, UserRole.customer, customer: i),
+                            onTap: () => _selectRole(distributor, UserRole.customer, customer: i),
                           ),
                       ],
                     ),
