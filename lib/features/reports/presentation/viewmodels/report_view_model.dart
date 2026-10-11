@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/error/app_exception.dart';
 import '../../../../core/firebase/firebase_providers.dart';
 import '../../../../core/utils/dates.dart';
 import '../../../../core/viewmodel/action_view_model.dart';
@@ -135,9 +134,8 @@ class DemoDataViewModel extends ActionViewModel {
     required int closeHour,
   }) =>
       run(() async {
-        final products = ref.read(activeProductsProvider).value;
-        if (products == null) throw const AppException('Data produk belum termuat.');
-        final customers = (ref.read(customersProvider).value ?? const []).map((c) => c.displayName).toList();
+        final products = await ref.read(activeProductsProvider.future);
+        final customers = (await ref.read(customersProvider.future)).map((c) => c.displayName).toList();
         final invoices = DemoSalesGenerator(seed: Random().nextInt(1 << 31)).generate(
           date: date,
           target: target,

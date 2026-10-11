@@ -62,7 +62,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.onDispose(auth.dispose);
 
   ShellRoute shell(List<RouteBase> routes) => ShellRoute(
-        builder: (context, state, child) => AppShell(location: state.matchedLocation, child: child),
+        builder: (context, state, child) => AppShell(location: state.uri.path, child: child),
         routes: routes,
       );
 

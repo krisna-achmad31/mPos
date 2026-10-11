@@ -51,7 +51,7 @@ class _DiscountFormDialogState extends ConsumerState<DiscountFormDialog> {
   }
 
   Future<void> _save() async {
-    final products = ref.read(productsProvider).value ?? [];
+    final products = ref.read(activeProductsProvider).value ?? [];
     final customers = ref.read(customersProvider).value ?? [];
     final discount = Discount(
       id: widget.initial?.id ?? '',

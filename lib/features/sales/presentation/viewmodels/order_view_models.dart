@@ -25,11 +25,14 @@ class OrderActionsViewModel extends ActionViewModel {
   Future<String?> process(SalesOrder order, {OrderDiscount orderDiscount = const OrderDiscount.none()}) async {
     String? invoiceId;
     final ok = await run(() async {
+      // Pastikan diskon & pajak sudah termuat, bukan nilai kosong saat loading.
+      await ref.read(discountsProvider.future);
+      final settings = await ref.read(storeSettingsProvider.future);
       invoiceId = await ref.read(salesRepositoryProvider).processOrder(
             order: order,
             pricedLines: previewLines(order),
             orderDiscount: orderDiscount,
-            taxPercent: ref.read(storeSettingsProvider).value?.effectiveTax ?? 0,
+            taxPercent: settings.effectiveTax,
             by: ref.read(currentUserProvider),
           );
     });
