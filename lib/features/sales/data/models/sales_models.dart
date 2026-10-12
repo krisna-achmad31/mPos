@@ -118,6 +118,10 @@ abstract final class SalesModels {
         totalCost: readInt(m['totalCost']),
         createdAt: readDate(m['createdAt']),
         voided: readBool(m['voided']),
+        unitCostByProduct: {
+          if (m['lines'] case final Map<String, dynamic> lines)
+            for (final e in lines.entries) e.key: readInt(e.value),
+        },
       );
 
   static Timestamp ts(DateTime d) => Timestamp.fromDate(d);

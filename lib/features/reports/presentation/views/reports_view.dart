@@ -24,7 +24,11 @@ class ReportsView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(reportFilterProvider);
     return Scaffold(
-      appBar: AppBar(leading: shellMenuButton(context), title: const Text('Laporan')),
+      appBar: AppBar(
+        leading: shellMenuButton(context),
+        title: const Text('Laporan'),
+        actions: const [_ExportButton(), SizedBox(width: 8)],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
@@ -771,6 +775,30 @@ class _DemoInvoiceEditDialogState extends ConsumerState<_DemoInvoiceEditDialog> 
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
         FilledButton(onPressed: busy ? null : _save, child: const Text('Simpan')),
       ],
+    );
+  }
+}
+
+/// Export seluruh penjualan periode terpilih ke Excel (format rekap daftar transaksi).
+class _ExportButton extends ConsumerWidget {
+  const _ExportButton();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final busy = ref.watch(reportExportViewModelProvider).isLoading;
+    final ready = ref.watch(salesReportProvider).hasValue;
+    return TextButton.icon(
+      icon: busy
+          ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.table_view_outlined),
+      label: const Text('Export Excel'),
+      onPressed: busy || !ready
+          ? null
+          : () async {
+              final ok = await ref.read(reportExportViewModelProvider.notifier).exportXlsx();
+              if (!context.mounted || ok) return;
+              showMessage(context, '${ref.read(reportExportViewModelProvider).error}', isError: true);
+            },
     );
   }
 }

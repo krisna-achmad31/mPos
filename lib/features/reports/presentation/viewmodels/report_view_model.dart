@@ -1,8 +1,11 @@
 import 'dart:math';
 
 import 'package:equatable/equatable.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
+import '../../../../core/error/app_exception.dart';
 import '../../../../core/utils/dates.dart';
 import '../../../../core/viewmodel/action_view_model.dart';
 import '../../../auth/auth_providers.dart';
@@ -14,10 +17,12 @@ import '../../../sales/domain/entities/invoice.dart';
 import '../../../sales/presentation/viewmodels/report_view_model.dart';
 import '../../../sales/sales_providers.dart';
 import '../../data/demo_report_repository.dart';
+import '../../data/sales_xlsx.dart';
 import '../../domain/demo_catalog.dart';
 import '../../domain/demo_invoice_editor.dart';
 import '../../domain/demo_sales_generator.dart';
 import '../../domain/report_builder.dart';
+import '../../domain/sales_export.dart';
 import '../../domain/sales_report.dart';
 
 enum ReportMode { real, demo }
@@ -201,3 +206,47 @@ class DemoDataViewModel extends ActionViewModel {
 }
 
 final demoDataViewModelProvider = NotifierProvider<DemoDataViewModel, AsyncValue<void>>(DemoDataViewModel.new);
+
+/// Export rekap penjualan (tanpa pengeluaran) ke Excel sesuai periode & mode laporan yang dipilih.
+class ReportExportViewModel extends ActionViewModel {
+  static String fileName(ReportFilter f) {
+    final period = f.period == ReportPeriod.day
+        ? DateFormat('d MMM yyyy', 'id_ID').format(f.date)
+        : DateFormat('MMMM yyyy', 'id_ID').format(f.date);
+    return 'Rekap Penjualan${f.mode == ReportMode.demo ? ' (Demo)' : ''} $period.xlsx';
+  }
+
+  Future<bool> exportXlsx() => run(() async {
+        final filter = ref.read(reportFilterProvider);
+        final report = ref.read(salesReportProvider).value;
+        if (report == null) throw const AppException('Laporan masih dimuat, coba lagi.');
+        if (report.invoices.isEmpty) throw const AppException('Tidak ada penjualan di periode ini.');
+
+        final hpp = {
+          for (final e in (await readReady(productCostsProvider.future)).entries) e.key: e.value.hpp,
+          if (filter.mode == ReportMode.demo) ...DemoCatalog.hpp,
+        };
+        // Nota asli: HPP yang disalin saat nota terbit, agar sama dengan laporan laba.
+        final unitCosts = filter.mode == ReportMode.real
+            ? {
+                for (final c in await readReady(_invoiceCostsProvider(startOfMonth(filter.date)).future))
+                  c.invoiceId: c.unitCostByProduct,
+              }
+            : const <String, Map<String, int>>{};
+
+        final rows = SalesExport.rows(
+          report.invoices,
+          unitCost: (inv, productId) => unitCosts[inv.id]?[productId] ?? hpp[productId] ?? 0,
+        );
+        await FilePicker.saveFile(
+          fileName: fileName(filter),
+          bytes: SalesXlsx.build(rows),
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          type: FileType.custom,
+          allowedExtensions: const ['xlsx'],
+        );
+      });
+}
+
+final reportExportViewModelProvider =
+    NotifierProvider<ReportExportViewModel, AsyncValue<void>>(ReportExportViewModel.new);

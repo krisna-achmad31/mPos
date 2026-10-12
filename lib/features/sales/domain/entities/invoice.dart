@@ -90,10 +90,19 @@ class PaymentRecord extends Equatable {
 
 /// HPP per nota, hanya untuk Owner (laporan laba).
 class InvoiceCost extends Equatable {
-  const InvoiceCost({required this.invoiceId, required this.totalCost, required this.createdAt, this.voided = false});
+  const InvoiceCost({
+    required this.invoiceId,
+    required this.totalCost,
+    required this.createdAt,
+    this.voided = false,
+    this.unitCostByProduct = const {},
+  });
 
   final String invoiceId;
   final int totalCost;
+
+  /// HPP per satuan dasar saat nota terbit (productId -> HPP).
+  final Map<String, int> unitCostByProduct;
   final DateTime createdAt;
   final bool voided;
 
