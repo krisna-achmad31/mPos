@@ -345,8 +345,47 @@ class FirestoreSalesRepository implements SalesRepository {
       if (amount > total - paid) throw AppException('Nominal melebihi sisa tagihan (${total - paid}).');
 
       final newPaid = paid + amount;
-      tx.update(ref, {'paid': newPaid, 'paymentStatus': PaymentStatus.of(paid: newPaid, total: total).name});
+      final status = PaymentStatus.of(paid: newPaid, total: total);
+      tx.update(ref, {
+        'paid': newPaid,
+        'paymentStatus': status.name,
+        // Lunas: catat cara pelunasannya (tempo/DP -> tunai/transfer/QRIS) untuk filter riwayat nota.
+        if (status == PaymentStatus.paid) 'paymentMethod': method.name,
+        if (status == PaymentStatus.paid) 'settledAt': FieldValue.serverTimestamp(),
+      });
+      final orderId = readNullableString(data['orderId']);
+      if (status == PaymentStatus.paid && orderId != null && data['dueDate'] != null) {
+        tx.update(_orders.doc(orderId), {'creditPaid': true});
+      }
       _writePayment(tx, invoice.id, invoice.customerId, amount, method, by);
+    });
+  }
+
+  @override
+  Future<void> setCreditTerm({required Invoice invoice, required DateTime dueDate, required AppUser by}) async {
+    await _db.runTransaction((tx) async {
+      final ref = _invoices.doc(invoice.id);
+      final data = (await tx.get(ref)).data();
+      if (data == null || readBool(data['voided'])) throw const AppException('Nota tidak ditemukan atau sudah batal.');
+      final paid = readInt(data['paid']);
+      final total = readInt(data['total']);
+      final due = SalesModels.ts(DateTime(dueDate.year, dueDate.month, dueDate.day));
+      final update = <String, dynamic>{'paymentMethod': PaymentMethod.credit.name, 'dueDate': due, 'creditSetBy': by.uid};
+      // Terlanjur dicatat lunas: batalkan pembayarannya (riwayat tetap ada) agar seluruh tagihan jadi tempo.
+      if (paid >= total && paid > 0) {
+        final previous = SalesModels.methodFromName(data['paymentMethod']) ?? PaymentMethod.cash;
+        _writePayment(tx, invoice.id, invoice.customerId, -paid, previous, by, reversal: true);
+        update.addAll({
+          'paid': 0,
+          'change': 0,
+          'paymentStatus': PaymentStatus.unpaid.name,
+          'settledAt': FieldValue.delete(),
+        });
+      }
+      tx.update(ref, update);
+      // Pesanan online: tandai tempo agar kurir tahu tidak perlu menagih saat mengantar.
+      final orderId = readNullableString(data['orderId']);
+      if (orderId != null) tx.update(_orders.doc(orderId), {'creditDueDate': due, 'creditPaid': false});
     });
   }
 
@@ -445,8 +484,17 @@ class FirestoreSalesRepository implements SalesRepository {
     });
   }
 
-  void _writePayment(Transaction tx, String invoiceId, String? customerId, int amount, PaymentMethod method, AppUser by) {
+  void _writePayment(
+    Transaction tx,
+    String invoiceId,
+    String? customerId,
+    int amount,
+    PaymentMethod method,
+    AppUser by, {
+    bool reversal = false,
+  }) {
     tx.set(_payments.doc(), {
+      if (reversal) 'reversal': true,
       'invoiceId': invoiceId,
       'customerId': customerId,
       'amount': amount,

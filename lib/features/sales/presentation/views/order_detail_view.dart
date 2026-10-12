@@ -105,6 +105,7 @@ class _OrderBody extends ConsumerWidget {
                 ],
               ),
             _DeliveryProgress(status: order.status),
+            if (order.isCredit && order.status != OrderStatus.cancelled) _CreditInfo(order: order, role: user.role),
             if (order.note.isNotEmpty) Text('Catatan: ${order.note}'),
             if (order.cancelReason.isNotEmpty) Text('Alasan batal: ${order.cancelReason}'),
             const Divider(),
@@ -282,6 +283,42 @@ class _DeliveryProgress extends StatelessWidget {
                 ),
               ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Pesanan tempo: barang tetap dikirim, pembayaran menyusul.
+class _CreditInfo extends StatelessWidget {
+  const _CreditInfo({required this.order, required this.role});
+
+  final SalesOrder order;
+  final UserRole role;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final due = formatDate(order.creditDueDate!);
+    final message = order.creditPaid
+        ? 'Tempo s/d $due · sudah lunas'
+        : switch (role) {
+            UserRole.spv => 'Pembayaran TEMPO s/d $due. Barang tetap diantar, tidak perlu menagih saat antar.',
+            UserRole.customer => 'Pembayaran tempo: barang dikirim dulu, bayar paling lambat $due.',
+            UserRole.owner => 'Pembayaran tempo s/d $due. Barang boleh dikirim sebelum lunas.',
+          };
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: order.creditPaid ? scheme.surfaceContainerHighest : scheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        spacing: 10,
+        children: [
+          Icon(order.creditPaid ? Icons.check_circle_outline : Icons.schedule, color: scheme.onTertiaryContainer),
+          Expanded(child: Text(message, style: TextStyle(color: scheme.onTertiaryContainer))),
         ],
       ),
     );

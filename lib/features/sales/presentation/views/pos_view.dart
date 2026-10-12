@@ -231,7 +231,7 @@ class _PaymentPanelState extends ConsumerState<_PaymentPanel> {
     if (total > 0) {
       paymentInfo = switch (state.method) {
         PaymentMethod.cash => given >= total ? 'Kembalian ${formatRupiah(given - total)}' : 'Uang kurang ${formatRupiah(total - given)}',
-        PaymentMethod.transfer => 'Dianggap lunas',
+        PaymentMethod.transfer || PaymentMethod.qris => 'Dianggap lunas',
         PaymentMethod.downPayment || PaymentMethod.credit => 'Sisa tagihan ${formatRupiah((total - given).clamp(0, total))}',
       };
     }
@@ -287,7 +287,7 @@ class _PaymentPanelState extends ConsumerState<_PaymentPanel> {
             items: [for (final m in PaymentMethod.values) DropdownMenuItem(value: m, child: Text(m.label))],
             onChanged: (m) => vm.setMethod(m ?? PaymentMethod.cash),
           ),
-          if (state.method != PaymentMethod.transfer)
+          if (!state.method.isCashless)
             TextField(
               controller: _amount,
               keyboardType: TextInputType.number,

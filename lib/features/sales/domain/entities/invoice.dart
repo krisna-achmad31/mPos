@@ -22,6 +22,7 @@ class Invoice extends Equatable {
     this.paymentMethod,
     this.createdByName = '',
     this.voided = false,
+    this.dueDate,
   });
 
   final String id;
@@ -42,12 +43,24 @@ class Invoice extends Equatable {
   /// true bila order dibatalkan setelah nota terbit.
   final bool voided;
 
+  /// Tanggal janji bayar untuk nota tempo. Tetap tersimpan setelah lunas sebagai riwayat.
+  final DateTime? dueDate;
+
   int get remaining => totals.total - paid;
+
+  /// Tempo yang belum lunas (dari kasir metode Tempo, atau dijadikan tempo lewat Catat pelunasan).
+  bool get isOpenCredit => !voided && remaining > 0 && (paymentMethod == PaymentMethod.credit || dueDate != null);
+
+  /// Lewat tanggal jatuh tempo dan belum lunas.
+  bool isOverdue(DateTime now) {
+    final due = dueDate;
+    return isOpenCredit && due != null && DateTime(now.year, now.month, now.day).isAfter(due);
+  }
 
   PaymentStatus get paymentStatus => PaymentStatus.of(paid: paid, total: totals.total);
 
   @override
-  List<Object?> get props => [id, number, lines, totals, paid, voided];
+  List<Object?> get props => [id, number, lines, totals, paid, voided, paymentMethod, dueDate];
 }
 
 class PaymentRecord extends Equatable {
@@ -58,6 +71,7 @@ class PaymentRecord extends Equatable {
     required this.method,
     required this.at,
     this.byName = '',
+    this.isReversal = false,
   });
 
   final String id;
@@ -66,6 +80,9 @@ class PaymentRecord extends Equatable {
   final PaymentMethod method;
   final DateTime at;
   final String byName;
+
+  /// Pembatalan pembayaran (nominal negatif), mis. nota lunas diubah ke tempo.
+  final bool isReversal;
 
   @override
   List<Object?> get props => [id, invoiceId, amount, method, at];

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
@@ -28,6 +29,10 @@ class InvoicePrintView extends ConsumerWidget {
 
   /// Pesanan online dibayar belakangan: metodenya ada di riwayat pembayaran.
   String _paymentLabel(WidgetRef ref) {
+    if (invoice.isOpenCredit) {
+      final due = invoice.dueDate;
+      return due == null ? 'Tempo' : 'Tempo s/d ${DateFormat('dd/MMM/yyyy', 'id_ID').format(due)}';
+    }
     final method = invoice.paymentMethod ?? ref.watch(paymentsProvider(invoice.id)).value?.lastOrNull?.method;
     return method?.label ?? '';
   }

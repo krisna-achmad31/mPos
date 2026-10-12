@@ -72,6 +72,7 @@ class _OrderList extends StatelessWidget {
             '${formatDateTime(o.createdAt)} · ${o.lines.fold(0, (s, l) => s + l.qty)} item',
             if (showCustomer && o.address.isNotEmpty) o.address,
             if (o.courierName.isNotEmpty) 'Kurir: ${o.courierName}',
+            if (o.isCredit && !o.creditPaid) 'Tempo s/d ${formatDate(o.creditDueDate!)}',
           ].join('\n')),
           trailing: Text(formatRupiah(o.subtotal)),
           onTap: () => onTap(o),

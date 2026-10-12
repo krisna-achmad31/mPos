@@ -61,6 +61,8 @@ abstract final class SalesModels {
         cancelReason: readString(m['cancelReason']),
         courierId: readNullableString(m['courierId']),
         courierName: readString(m['courierName']),
+        creditDueDate: readNullableDate(m['creditDueDate']),
+        creditPaid: readBool(m['creditPaid']),
       );
 
   static PaymentMethod? methodFromName(Object? name) =>
@@ -89,6 +91,7 @@ abstract final class SalesModels {
         createdAt: readDate(m['createdAt']),
         createdByName: readString(m['createdByName']),
         voided: readBool(m['voided']),
+        dueDate: readNullableDate(m['dueDate']),
       );
 
   static Map<String, dynamic> totalsToMap(SaleTotals t) => {
@@ -107,6 +110,7 @@ abstract final class SalesModels {
         method: methodFromName(m['method']) ?? PaymentMethod.cash,
         at: readDate(m['at']),
         byName: readString(m['byName']),
+        isReversal: readBool(m['reversal']),
       );
 
   static InvoiceCost costFromMap(String id, Map<String, dynamic> m) => InvoiceCost(

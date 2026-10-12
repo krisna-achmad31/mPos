@@ -56,6 +56,10 @@ class OrderActionsViewModel extends ActionViewModel {
   Future<bool> addPayment(Invoice invoice, int amount, PaymentMethod method) => run(() => ref
       .read(salesRepositoryProvider)
       .addPayment(invoice: invoice, amount: amount, method: method, by: ref.read(currentUserProvider)));
+
+  Future<bool> setCreditTerm(Invoice invoice, DateTime dueDate) => run(() => ref
+      .read(salesRepositoryProvider)
+      .setCreditTerm(invoice: invoice, dueDate: dueDate, by: ref.read(currentUserProvider)));
 }
 
 final orderActionsViewModelProvider =

@@ -40,6 +40,8 @@ class SalesOrder extends Equatable {
     this.cancelReason = '',
     this.courierId,
     this.courierName = '',
+    this.creditDueDate,
+    this.creditPaid = false,
   });
 
   final String id;
@@ -57,8 +59,18 @@ class SalesOrder extends Equatable {
   final String? courierId;
   final String courierName;
 
+  /// Disalin dari nota saat dijadikan tempo: barang tetap dikirim, bayar paling lambat tanggal ini.
+  /// Ada di pesanan karena kurir (SPV) tidak bisa membuka nota.
+  final DateTime? creditDueDate;
+
+  /// Tempo sudah dibayar lunas.
+  final bool creditPaid;
+
+  bool get isCredit => creditDueDate != null;
+
   int get subtotal => lines.fold(0, (sum, l) => sum + l.gross);
 
   @override
-  List<Object?> get props => [id, customerId, lines, status, invoiceId, cancelReason, courierId];
+  List<Object?> get props =>
+      [id, customerId, lines, status, invoiceId, cancelReason, courierId, creditDueDate, creditPaid];
 }

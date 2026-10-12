@@ -35,7 +35,7 @@ abstract final class DemoInvoiceEditor {
         method: method,
         amount: given >= totals.total ? given : totals.total,
       ),
-      PaymentMethod.transfer => SaleCalculator.pay(total: totals.total, method: method, amount: totals.total),
+      PaymentMethod.transfer || PaymentMethod.qris => SaleCalculator.pay(total: totals.total, method: method, amount: totals.total),
       _ => SaleCalculator.pay(
         total: totals.total,
         method: PaymentMethod.credit,

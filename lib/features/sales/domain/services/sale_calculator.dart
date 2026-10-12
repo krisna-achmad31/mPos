@@ -43,13 +43,20 @@ class SaleTotals extends Equatable {
 
 enum PaymentMethod {
   cash('Tunai'),
-  transfer('Transfer / QRIS'),
+  transfer('Transfer'),
+  qris('QRIS'),
   downPayment('DP'),
   credit('Tempo');
 
   const PaymentMethod(this.label);
 
   final String label;
+
+  /// Transfer dan QRIS dianggap langsung lunas sebesar total.
+  bool get isCashless => this == transfer || this == qris;
+
+  /// Metode yang dipakai saat uang benar-benar diterima (catat pelunasan).
+  static const settlement = [cash, transfer, qris];
 
   /// DP dan tempo meninggalkan sisa tagihan.
   bool get allowsRemaining => this == downPayment || this == credit;
@@ -117,6 +124,7 @@ abstract final class SaleCalculator {
         if (amount < total) throw const AppException('Uang tunai kurang dari total.');
         return PaymentResult(paid: total, change: amount - total, remaining: 0);
       case PaymentMethod.transfer:
+      case PaymentMethod.qris:
         return PaymentResult(paid: total, change: 0, remaining: 0);
       case PaymentMethod.downPayment:
         if (amount <= 0) throw const AppException('Nominal DP harus lebih dari 0.');

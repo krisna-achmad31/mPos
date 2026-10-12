@@ -58,4 +58,8 @@ abstract interface class SalesRepository {
 
   /// Pelunasan DP / tempo.
   Future<void> addPayment({required Invoice invoice, required int amount, required PaymentMethod method, required AppUser by});
+
+  /// Jadikan sisa tagihan sebagai tempo, dibayar paling lambat [dueDate].
+  /// Nota yang sudah lunas: pembayarannya dibatalkan (dicatat sebagai pembayaran negatif) lalu jadi tempo penuh.
+  Future<void> setCreditTerm({required Invoice invoice, required DateTime dueDate, required AppUser by});
 }
