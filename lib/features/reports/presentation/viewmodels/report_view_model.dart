@@ -207,39 +207,75 @@ class DemoDataViewModel extends ActionViewModel {
 
 final demoDataViewModelProvider = NotifierProvider<DemoDataViewModel, AsyncValue<void>>(DemoDataViewModel.new);
 
-/// Export rekap penjualan (tanpa pengeluaran) ke Excel sesuai periode & mode laporan yang dipilih.
-class ReportExportViewModel extends ActionViewModel {
-  static String fileName(ReportFilter f) {
-    final period = f.period == ReportPeriod.day
-        ? DateFormat('d MMM yyyy', 'id_ID').format(f.date)
-        : DateFormat('MMMM yyyy', 'id_ID').format(f.date);
-    return 'Rekap Penjualan${f.mode == ReportMode.demo ? ' (Demo)' : ''} $period.xlsx';
+enum ExportPeriod { range, month, year }
+
+/// Rentang export: [from] inklusif, [to] eksklusif.
+class ExportRange extends Equatable {
+  const ExportRange._(this.period, this.from, this.to);
+
+  /// Dari tanggal [first] sampai [last] (keduanya ikut).
+  factory ExportRange.days(DateTime first, DateTime last) {
+    final a = startOfDay(first.isAfter(last) ? last : first);
+    final b = startOfDay(first.isAfter(last) ? first : last);
+    return ExportRange._(ExportPeriod.range, a, DateTime(b.year, b.month, b.day + 1));
   }
 
-  Future<bool> exportXlsx() => run(() async {
-        final filter = ref.read(reportFilterProvider);
-        final report = ref.read(salesReportProvider).value;
-        if (report == null) throw const AppException('Laporan masih dimuat, coba lagi.');
-        if (report.invoices.isEmpty) throw const AppException('Tidak ada penjualan di periode ini.');
+  factory ExportRange.month(int year, int month) =>
+      ExportRange._(ExportPeriod.month, DateTime(year, month), DateTime(year, month + 1));
+
+  factory ExportRange.year(int year) => ExportRange._(ExportPeriod.year, DateTime(year), DateTime(year + 1));
+
+  final ExportPeriod period;
+  final DateTime from;
+  final DateTime to;
+
+  DateTime get lastDay => DateTime(to.year, to.month, to.day - 1);
+
+  /// Mis. "12 Okt 2026", "1 Okt 2026 - 15 Okt 2026", "Oktober 2026", "2026".
+  String get label {
+    final day = DateFormat('d MMM yyyy', 'id_ID');
+    return switch (period) {
+      ExportPeriod.range => from == lastDay ? day.format(from) : '${day.format(from)} - ${day.format(lastDay)}',
+      ExportPeriod.month => DateFormat('MMMM yyyy', 'id_ID').format(from),
+      ExportPeriod.year => '${from.year}',
+    };
+  }
+
+  @override
+  List<Object?> get props => [period, from, to];
+}
+
+/// Export rekap penjualan (tanpa pengeluaran) ke Excel untuk rentang pilihan; mode (asli/demo) ikut laporan.
+class ReportExportViewModel extends ActionViewModel {
+  static String fileName(ExportRange range, ReportMode mode) =>
+      'Rekap Penjualan${mode == ReportMode.demo ? ' (Demo)' : ''} ${range.label}.xlsx';
+
+  Future<bool> exportXlsx(ExportRange range) => run(() async {
+        final mode = ref.read(reportFilterProvider).mode;
+        final demo = mode == ReportMode.demo;
+        final invoices = demo
+            ? await ref.read(demoReportRepositoryProvider).watchInvoices(range.from, range.to).first
+            : await ref.read(salesRepositoryProvider).watchInvoices(from: range.from, to: range.to).first;
+        if (invoices.every((i) => i.voided)) throw AppException('Tidak ada penjualan di ${range.label}.');
 
         final hpp = {
           for (final e in (await readReady(productCostsProvider.future)).entries) e.key: e.value.hpp,
-          if (filter.mode == ReportMode.demo) ...DemoCatalog.hpp,
+          if (demo) ...DemoCatalog.hpp,
         };
         // Nota asli: HPP yang disalin saat nota terbit, agar sama dengan laporan laba.
-        final unitCosts = filter.mode == ReportMode.real
-            ? {
-                for (final c in await readReady(_invoiceCostsProvider(startOfMonth(filter.date)).future))
+        final unitCosts = demo
+            ? const <String, Map<String, int>>{}
+            : {
+                for (final c in await ref.read(salesRepositoryProvider).watchInvoiceCosts(range.from, range.to).first)
                   c.invoiceId: c.unitCostByProduct,
-              }
-            : const <String, Map<String, int>>{};
+              };
 
         final rows = SalesExport.rows(
-          report.invoices,
+          invoices,
           unitCost: (inv, productId) => unitCosts[inv.id]?[productId] ?? hpp[productId] ?? 0,
         );
         await FilePicker.saveFile(
-          fileName: fileName(filter),
+          fileName: fileName(range, mode),
           bytes: SalesXlsx.build(rows),
           mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           type: FileType.custom,

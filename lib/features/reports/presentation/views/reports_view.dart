@@ -779,26 +779,159 @@ class _DemoInvoiceEditDialogState extends ConsumerState<_DemoInvoiceEditDialog> 
   }
 }
 
-/// Export seluruh penjualan periode terpilih ke Excel (format rekap daftar transaksi).
+/// Export penjualan ke Excel (format rekap daftar transaksi): pilih tanggal, bulan, atau tahun dulu.
 class _ExportButton extends ConsumerWidget {
   const _ExportButton();
+
+  Future<void> _export(BuildContext context, WidgetRef ref) async {
+    final filter = ref.read(reportFilterProvider);
+    final range = await showDialog<ExportRange>(
+      context: context,
+      builder: (_) => _ExportDialog(filter: filter),
+    );
+    if (range == null || !context.mounted) return;
+    final ok = await ref.read(reportExportViewModelProvider.notifier).exportXlsx(range);
+    if (!context.mounted) return;
+    showMessage(
+      context,
+      ok ? 'Rekap ${range.label} diunduh' : '${ref.read(reportExportViewModelProvider).error}',
+      isError: !ok,
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final busy = ref.watch(reportExportViewModelProvider).isLoading;
-    final ready = ref.watch(salesReportProvider).hasValue;
     return TextButton.icon(
       icon: busy
           ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
           : const Icon(Icons.table_view_outlined),
       label: const Text('Export Excel'),
-      onPressed: busy || !ready
-          ? null
-          : () async {
-              final ok = await ref.read(reportExportViewModelProvider.notifier).exportXlsx();
-              if (!context.mounted || ok) return;
-              showMessage(context, '${ref.read(reportExportViewModelProvider).error}', isError: true);
-            },
+      onPressed: busy ? null : () => _export(context, ref),
+    );
+  }
+}
+
+class _ExportDialog extends StatefulWidget {
+  const _ExportDialog({required this.filter});
+
+  /// Nilai awal mengikuti periode laporan yang sedang dibuka.
+  final ReportFilter filter;
+
+  @override
+  State<_ExportDialog> createState() => _ExportDialogState();
+}
+
+class _ExportDialogState extends State<_ExportDialog> {
+  late var _period = widget.filter.period == ReportPeriod.day ? ExportPeriod.range : ExportPeriod.month;
+  late var _first = widget.filter.date;
+  late var _last = widget.filter.date;
+  late var _month = widget.filter.date.month;
+  late var _year = widget.filter.date.year;
+
+  static final _years = [for (var y = DateTime.now().year; y >= DateTime.now().year - 5; y--) y];
+
+  ExportRange get _range => switch (_period) {
+        ExportPeriod.range => ExportRange.days(_first, _last),
+        ExportPeriod.month => ExportRange.month(_year, _month),
+        ExportPeriod.year => ExportRange.year(_year),
+      };
+
+  Future<void> _pickDate({required bool first}) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: first ? _first : _last,
+      firstDate: DateTime(_years.last),
+      lastDate: DateTime.now(),
+      helpText: first ? 'Dari tanggal' : 'Sampai tanggal',
+    );
+    if (picked == null) return;
+    setState(() {
+      if (first) {
+        _first = picked;
+        if (_last.isBefore(picked)) _last = picked;
+      } else {
+        _last = picked;
+        if (_first.isAfter(picked)) _first = picked;
+      }
+    });
+  }
+
+  Widget _dateField(String label, DateTime value, {required bool first}) => Expanded(
+        child: InkWell(
+          onTap: () => _pickDate(first: first),
+          child: InputDecorator(
+            decoration: InputDecoration(labelText: label, suffixIcon: const Icon(Icons.event)),
+            child: Text(formatDate(value)),
+          ),
+        ),
+      );
+
+  Widget _yearField() => DropdownButtonFormField<int>(
+        initialValue: _years.contains(_year) ? _year : _years.first,
+        decoration: const InputDecoration(labelText: 'Tahun'),
+        items: [for (final y in _years) DropdownMenuItem(value: y, child: Text('$y'))],
+        onChanged: (v) => setState(() => _year = v ?? _year),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final monthNames = [for (var m = 1; m <= 12; m++) DateFormat('MMMM', 'id_ID').format(DateTime(2026, m))];
+    return AlertDialog(
+      title: const Text('Export Excel'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: 16,
+          children: [
+            SegmentedButton<ExportPeriod>(
+              segments: const [
+                ButtonSegment(value: ExportPeriod.range, label: Text('Tanggal'), icon: Icon(Icons.date_range)),
+                ButtonSegment(value: ExportPeriod.month, label: Text('Bulan'), icon: Icon(Icons.calendar_month)),
+                ButtonSegment(value: ExportPeriod.year, label: Text('Tahun'), icon: Icon(Icons.calendar_today)),
+              ],
+              selected: {_period},
+              onSelectionChanged: (s) => setState(() => _period = s.first),
+            ),
+            if (_period == ExportPeriod.range)
+              Row(spacing: 12, children: [
+                _dateField('Dari', _first, first: true),
+                _dateField('Sampai', _last, first: false),
+              ])
+            else if (_period == ExportPeriod.month)
+              Row(spacing: 12, children: [
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    initialValue: _month,
+                    decoration: const InputDecoration(labelText: 'Bulan'),
+                    items: [
+                      for (var m = 1; m <= 12; m++) DropdownMenuItem(value: m, child: Text(monthNames[m - 1])),
+                    ],
+                    onChanged: (v) => setState(() => _month = v ?? _month),
+                  ),
+                ),
+                Expanded(child: _yearField()),
+              ])
+            else
+              _yearField(),
+            Text(
+              'Periode: ${_range.label} · ${widget.filter.mode == ReportMode.demo ? 'data demo' : 'data asli'}. '
+              'Hanya penjualan (tanpa pengeluaran), nota batal tidak ikut.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+        FilledButton.icon(
+          onPressed: () => Navigator.pop(context, _range),
+          icon: const Icon(Icons.download),
+          label: const Text('Export'),
+        ),
+      ],
     );
   }
 }
