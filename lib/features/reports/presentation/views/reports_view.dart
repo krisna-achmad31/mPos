@@ -329,7 +329,8 @@ class _ReportBody extends StatelessWidget {
     final busiest = r.busiestHour;
     final isDay = period == ReportPeriod.day;
 
-    if (r.invoices.isEmpty) {
+    // Tanpa penjualan tapi ada pengeluaran: tetap tampilkan laporan agar rugi terlihat.
+    if (r.invoices.isEmpty && r.expenses == 0) {
       return Padding(
         padding: const EdgeInsets.all(32),
         child: Text(
@@ -362,13 +363,12 @@ class _ReportBody extends StatelessWidget {
               hint: 'Margin ${(r.grossMargin * 100).toStringAsFixed(1)}%',
               icon: Icons.trending_up,
             ),
-            if (!r.isDemo)
-              KpiTile(
-                label: 'Laba bersih',
-                value: formatRupiah(r.netProfit),
-                hint: 'Setelah pengeluaran',
-                icon: Icons.account_balance_outlined,
-              ),
+            KpiTile(
+              label: 'Laba bersih',
+              value: formatRupiah(r.netProfit),
+              hint: 'Setelah pengeluaran',
+              icon: Icons.account_balance_outlined,
+            ),
             KpiTile(label: 'Diskon diberikan', value: formatRupiah(r.discounts), icon: Icons.local_offer_outlined),
             KpiTile(label: 'Belum dibayar', value: formatRupiah(r.receivables), icon: Icons.hourglass_bottom),
             if (busiest != null)
@@ -447,7 +447,7 @@ class _ReportBody extends StatelessWidget {
           title: 'Laba rugi',
           child: _ProfitLoss(report: r),
         ),
-        if (!r.isDemo && r.expensesByCategory.isNotEmpty)
+        if (r.expensesByCategory.isNotEmpty)
           SectionCard(
             title: 'Pengeluaran per kategori',
             child: ProportionList(items: r.expensesByCategory),
@@ -506,14 +506,23 @@ class _ProfitLoss extends StatelessWidget {
         _row(context, 'HPP', formatRupiah(r.cost), negative: true),
         const Divider(),
         _row(context, 'Laba kotor', formatRupiah(r.grossProfit), strong: true),
-        if (!r.isDemo) ...[
-          _row(context, 'Pengeluaran operasional', formatRupiah(r.expenses), negative: true),
-          const Divider(),
-          _row(context, 'Laba bersih', formatRupiah(r.netProfit), strong: true),
-        ] else
+        _row(
+          context,
+          r.to.difference(r.from).inDays <= 1
+              ? 'Pengeluaran (bulanan ÷ ${DateTime(r.from.year, r.from.month + 1, 0).day} hari)'
+              : 'Pengeluaran operasional',
+          formatRupiah(r.expenses),
+          negative: true,
+        ),
+        const Divider(),
+        _row(context, 'Laba bersih', formatRupiah(r.netProfit), strong: true),
+        if (r.isDemo)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: Text('Pengeluaran tidak ditampilkan di mode demo.', style: Theme.of(context).textTheme.bodySmall),
+            child: Text(
+              'Penjualan dari data demo, pengeluaran dari data asli (menu Pengeluaran).',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ),
       ],
     );
@@ -619,8 +628,7 @@ class _TransactionList extends StatelessWidget {
               ],
             ),
             children: [
-              for (final l in inv.lines)
-                _row(context, '${l.name}: ${lineDetail(l)}', formatRupiah(l.net)),
+              for (final l in inv.lines) _row(context, '${l.name}: ${lineDetail(l)}', formatRupiah(l.net)),
               if (!report.isDemo)
                 Align(
                   alignment: Alignment.centerRight,

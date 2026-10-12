@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/utils/dates.dart';
 import '../../../../core/viewmodel/action_view_model.dart';
 import '../../../auth/auth_providers.dart';
+import '../../../expenses/domain/expense.dart';
 import '../../../expenses/expense_providers.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/product_providers.dart';
@@ -87,11 +88,17 @@ final salesReportProvider = Provider<AsyncValue<SalesReport>>((ref) {
   final products = ref.watch(productsProvider);
   final costs = ref.watch(productCostsProvider);
 
+  // Pengeluaran asli dihitung di kedua mode: demo dipakai untuk uji coba laba bersih sebelum live.
+  final expenses = ref.watch(expensesInMonthProvider(month));
+  List<Expense> expensesInRange() => filter.period == ReportPeriod.month
+      ? expenses.value!
+      : ReportBuilder.dailyShareOfExpenses(expenses.value!, month);
+
   if (filter.mode == ReportMode.demo) {
     final demo = ref.watch(_demoInvoicesProvider(month));
-    final error = _firstError([products, costs, demo]);
+    final error = _firstError([products, costs, demo, expenses]);
     if (error != null) return error;
-    if (!products.hasValue || !costs.hasValue || !demo.hasValue) return const AsyncLoading();
+    if (!products.hasValue || !costs.hasValue || !demo.hasValue || !expenses.hasValue) return const AsyncLoading();
     return AsyncData(
       ReportBuilder.build(
         from: filter.from,
@@ -100,6 +107,7 @@ final salesReportProvider = Provider<AsyncValue<SalesReport>>((ref) {
         invoices: demo.value!,
         hppByProduct: {for (final e in costs.value!.entries) e.key: e.value.hpp, ...DemoCatalog.hpp},
         products: [...products.value!, ...DemoCatalog.products],
+        expenses: expensesInRange(),
         includeStock: false,
       ),
     );
@@ -107,7 +115,6 @@ final salesReportProvider = Provider<AsyncValue<SalesReport>>((ref) {
 
   final invoices = ref.watch(invoicesInMonthProvider(month));
   final invoiceCosts = ref.watch(_invoiceCostsProvider(month));
-  final expenses = ref.watch(expensesInMonthProvider(month));
   final sources = [products, costs, invoices, invoiceCosts, expenses];
   final error = _firstError(sources);
   if (error != null) return error;
@@ -123,7 +130,7 @@ final salesReportProvider = Provider<AsyncValue<SalesReport>>((ref) {
       invoices: invoices.value!,
       hppByProduct: {for (final e in costs.value!.entries) e.key: e.value.hpp},
       costByInvoice: {for (final c in invoiceCosts.value!) c.invoiceId: c.totalCost},
-      expenses: expenses.value!.where((e) => !e.date.isBefore(from) && e.date.isBefore(to)).toList(),
+      expenses: expensesInRange(),
       products: products.value!,
     ),
   );

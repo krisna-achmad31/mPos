@@ -5,6 +5,20 @@ import 'sales_report.dart';
 
 /// Menyusun [SalesReport] dari nota. Murni (tanpa Firebase) agar bisa dites.
 abstract final class ReportBuilder {
+  /// Pengeluaran dilihat per bulan: di laporan harian, total tiap kategori dibagi rata ke semua hari
+  /// di bulan itu, jadi laba bersih harian tidak anjlok di tanggal pengeluaran dicatat.
+  static List<Expense> dailyShareOfExpenses(List<Expense> monthExpenses, DateTime month) {
+    final days = DateTime(month.year, month.month + 1, 0).day;
+    final byCategory = <String, int>{};
+    for (final e in monthExpenses) {
+      byCategory[e.category] = (byCategory[e.category] ?? 0) + e.amount;
+    }
+    return [
+      for (final entry in byCategory.entries)
+        Expense(id: '', date: month, category: entry.key, amount: (entry.value / days).round()),
+    ];
+  }
+
   static SalesReport build({
     required DateTime from,
     required DateTime to,
