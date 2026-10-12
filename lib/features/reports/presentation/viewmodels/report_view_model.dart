@@ -18,6 +18,7 @@ import '../../../sales/presentation/viewmodels/report_view_model.dart';
 import '../../../sales/sales_providers.dart';
 import '../../data/demo_report_repository.dart';
 import '../../data/sales_xlsx.dart';
+import '../../domain/cafe_demo_catalog.dart';
 import '../../domain/demo_catalog.dart';
 import '../../domain/demo_invoice_editor.dart';
 import '../../domain/demo_sales_generator.dart';
@@ -73,6 +74,15 @@ final reportFilterProvider = NotifierProvider<ReportFilterViewModel, ReportFilte
 
 final demoReportRepositoryProvider = Provider((ref) => DemoReportRepository(ref.watch(tenantStoreProvider)));
 
+/// Katalog contoh untuk data demo: bahan cafe (distributor) atau menu kopi (POS kopi).
+typedef DemoCatalogSet = ({List<Product> products, Map<String, int> hpp, List<String> customers, BuyerProfile profile});
+
+final demoCatalogProvider = Provider<DemoCatalogSet>(
+  (ref) => ref.watch(isCafeWorkspaceProvider)
+      ? (products: CafeDemoCatalog.products, hpp: CafeDemoCatalog.hpp, customers: const [], profile: BuyerProfile.cafe)
+      : (products: DemoCatalog.products, hpp: DemoCatalog.hpp, customers: DemoCatalog.customers, profile: BuyerProfile.wholesale),
+);
+
 final _invoiceCostsProvider = StreamProvider.family<List<InvoiceCost>, DateTime>(
   (ref, month) => ref.watch(salesRepositoryProvider).watchInvoiceCosts(startOfMonth(month), startOfNextMonth(month)),
 );
@@ -100,6 +110,7 @@ final salesReportProvider = Provider<AsyncValue<SalesReport>>((ref) {
       : ReportBuilder.dailyShareOfExpenses(expenses.value!, month);
 
   if (filter.mode == ReportMode.demo) {
+    final catalog = ref.watch(demoCatalogProvider);
     final demo = ref.watch(_demoInvoicesProvider(month));
     final error = _firstError([products, costs, demo, expenses]);
     if (error != null) return error;
@@ -110,8 +121,8 @@ final salesReportProvider = Provider<AsyncValue<SalesReport>>((ref) {
         to: filter.to,
         isDemo: true,
         invoices: demo.value!,
-        hppByProduct: {for (final e in costs.value!.entries) e.key: e.value.hpp, ...DemoCatalog.hpp},
-        products: [...products.value!, ...DemoCatalog.products],
+        hppByProduct: {for (final e in costs.value!.entries) e.key: e.value.hpp, ...catalog.hpp},
+        products: [...products.value!, ...catalog.products],
         expenses: expensesInRange(),
         includeStock: false,
       ),
@@ -158,9 +169,11 @@ class DemoDataViewModel extends ActionViewModel {
     required int closeHour,
     required bool useDemoCatalog,
   }) => run(() async {
-    final products = useDemoCatalog ? DemoCatalog.products : await readReady(activeProductsProvider.future);
-    final customers = useDemoCatalog
-        ? DemoCatalog.customers
+    final catalog = ref.read(demoCatalogProvider);
+    final cafe = catalog.profile == BuyerProfile.cafe;
+    final products = useDemoCatalog ? catalog.products : await readReady(activeProductsProvider.future);
+    final customers = useDemoCatalog || cafe
+        ? catalog.customers
         : (await readReady(customersProvider.future)).map((c) => c.displayName).toList();
     final invoices = DemoSalesGenerator(seed: Random().nextInt(1 << 31)).generate(
       date: date,
@@ -169,7 +182,7 @@ class DemoDataViewModel extends ActionViewModel {
       customerNames: customers,
       openHour: openHour,
       closeHour: closeHour,
-      profile: useDemoCatalog ? BuyerProfile.wholesale : BuyerProfile.retail,
+      profile: cafe ? BuyerProfile.cafe : (useDemoCatalog ? BuyerProfile.wholesale : BuyerProfile.retail),
     );
     await ref
         .read(demoReportRepositoryProvider)
@@ -186,7 +199,7 @@ class DemoDataViewModel extends ActionViewModel {
   /// Produk asli + katalog demo, untuk menghitung ulang harga kemasan saat nota demo diedit.
   Map<String, Product> demoPricingProducts() => {
     for (final p in ref.read(productsProvider).value ?? const <Product>[]) p.id: p,
-    for (final p in DemoCatalog.products) p.id: p,
+    for (final p in ref.read(demoCatalogProvider).products) p.id: p,
   };
 
   Future<bool> editInvoice(Invoice invoice, {required DateTime time, required List<int> qtyByLine}) => run(() {
@@ -260,7 +273,7 @@ class ReportExportViewModel extends ActionViewModel {
 
         final hpp = {
           for (final e in (await readReady(productCostsProvider.future)).entries) e.key: e.value.hpp,
-          if (demo) ...DemoCatalog.hpp,
+          if (demo) ...ref.read(demoCatalogProvider).hpp,
         };
         // Nota asli: HPP yang disalin saat nota terbit, agar sama dengan laporan laba.
         final unitCosts = demo

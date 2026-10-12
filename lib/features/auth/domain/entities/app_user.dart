@@ -13,6 +13,7 @@ class AppUser extends Equatable {
     this.storeName = '',
     this.phone = '',
     this.address = '',
+    this.cafeId = '',
   });
 
   final String uid;
@@ -29,11 +30,28 @@ class AppUser extends Equatable {
   final String phone;
   final String address;
 
+  /// POS kopi tempat akun ini bekerja: uid pelanggan pemiliknya (Owner Kopi / Kasir).
+  final String cafeId;
+
   bool get isOwner => role == UserRole.owner;
 
   /// Nama yang tampil di nota: nama toko bila ada.
   String get displayName => storeName.isNotEmpty ? storeName : name;
 
+  /// Customer yang sedang membuka POS kopinya: akun sama, role Owner Kopi, data di `cafes/{uid}`.
+  AppUser asCafeOwner() => AppUser(
+        uid: uid,
+        name: name,
+        email: email,
+        role: UserRole.cafeOwner,
+        distributorId: distributorId,
+        active: active,
+        storeName: storeName,
+        phone: phone,
+        address: address,
+        cafeId: uid,
+      );
+
   @override
-  List<Object?> get props => [uid, name, email, role, distributorId, active, storeName, phone, address];
+  List<Object?> get props => [uid, name, email, role, distributorId, active, storeName, phone, address, cafeId];
 }

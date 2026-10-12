@@ -22,6 +22,16 @@ service cloud.firestore {
       return signedIn()
         && getAfter(/databases/$(database)/documents/distributors/$(d)).data.ownerUid == request.auth.uid;
     }
+    // POS kopi: id = uid Customer pemiliknya. Owner Kopi = Customer itu sendiri; Kasir punya cafeId.
+    function isCafeOwner(c) { return active() && request.auth.uid == c && profile().role == 'customer'; }
+    function isCashier(c) { return active() && profile().role == 'cashier' && profile().cafeId == c; }
+    function cafeMember(c) { return isCafeOwner(c) || isCashier(c); }
+    // Owner distributor boleh menambah stok kopi saat menandai pesanan pelanggannya diterima.
+    // getAfter: dokumen kopi bisa baru dibuat di transaksi yang sama.
+    function cafeDistributorOwner(c) {
+      return existsAfter(/databases/$(database)/documents/cafes/$(c))
+        && isOwner(getAfter(/databases/$(database)/documents/cafes/$(c)).data.distributorId);
+    }
     function onlyChanges(keys) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
     }
@@ -110,7 +120,7 @@ service cloud.firestore {
           || (isCustomer(d) && resource.data.customerId == request.auth.uid
               && resource.data.status == 'delivered'
               && request.resource.data.status == 'done'
-              && onlyChanges(['status', 'doneAt', 'doneBy']))
+              && onlyChanges(['status', 'doneAt', 'doneBy', 'cafeStockSynced']))
           // Kurir (SPV) yang ditugaskan: tandai terkirim.
           || (isSpv(d) && resource.data.courierId == request.auth.uid
               && resource.data.status == 'shipped'
@@ -150,9 +160,68 @@ service cloud.firestore {
         allow read, write: if isOwner(d);
       }
 
+      // Kode promo premium POS kopi. Customer membaca saat memakai kode dan hanya boleh menaikkan `used` 1.
+      match /premium_codes/{code} {
+        allow read: if member(d);
+        allow write: if isOwner(d);
+        allow update: if isCustomer(d) && onlyChanges(['used']) && request.resource.data.used == resource.data.used + 1;
+
+        // Satu dokumen per POS kopi (id = uid Customer): kode hanya sekali per pelanggan.
+        match /redemptions/{cafeId} {
+          allow read: if isOwner(d) || isSelf(cafeId);
+          allow create: if isCustomer(d) && isSelf(cafeId);
+        }
+      }
+
       match /audit_logs/{id} {
         allow read: if isOwner(d);
         allow create: if member(d) && request.resource.data.userId == request.auth.uid;
+      }
+    }
+
+    // POS kopi milik pelanggan distributor. Catatan: `premiumUntil` ditulis klien saat memakai kode;
+    // untuk produksi pindahkan aktivasi premium ke Cloud Functions agar tidak bisa dipalsukan.
+    match /cafes/{c} {
+      allow read: if cafeMember(c) || isOwner(resource.data.distributorId);
+      allow create: if request.resource.data.ownerUid == c && (isCafeOwner(c)
+        || (isOwner(request.resource.data.distributorId) && !('premiumUntil' in request.resource.data)));
+      allow update: if (isCafeOwner(c) && request.resource.data.distributorId == profile().distributorId)
+        || (isOwner(resource.data.distributorId) && onlyChanges(['ownerUid', 'name', 'distributorId']));
+
+      // Bahan: stok bertambah dari pesanan distributor (Owner Kopi / Owner distributor), berkurang dari kasir.
+      match /ingredients/{id} {
+        allow read: if cafeMember(c);
+        allow write: if isCafeOwner(c) || cafeDistributorOwner(c);
+        allow update: if isCashier(c) && onlyChanges(['stock']);
+      }
+
+      match /stock_movements/{id} {
+        allow read: if isCafeOwner(c);
+        allow create: if (cafeMember(c) || cafeDistributorOwner(c)) && request.resource.data.userId == request.auth.uid;
+      }
+
+      // Struk kasir dan turunannya.
+      match /invoices/{id} {
+        allow read: if cafeMember(c);
+        allow create: if cafeMember(c);
+        allow update, delete: if isCafeOwner(c);
+      }
+      match /invoice_costs/{id} {
+        allow read: if isCafeOwner(c);
+        allow create: if cafeMember(c);
+      }
+      match /payments/{id} {
+        allow read: if isCafeOwner(c);
+        allow create: if cafeMember(c);
+      }
+      match /counters/{id} {
+        allow read, write: if cafeMember(c);
+      }
+
+      // Menu, resep, pengaturan: dibaca kasir, diubah Owner Kopi.
+      match /{group}/{id} {
+        allow read: if cafeMember(c) && group in ['products', 'recipes', 'settings'];
+        allow read, write: if isCafeOwner(c);
       }
     }
   }

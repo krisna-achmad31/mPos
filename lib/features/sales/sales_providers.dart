@@ -20,7 +20,7 @@ final ordersProvider = StreamProvider<List<SalesOrder>>((ref) {
   return switch (user.role) {
     UserRole.owner => repo.watchOrders(),
     UserRole.spv => repo.watchOrders(courierId: user.uid),
-    UserRole.customer => repo.watchOrders(customerId: user.uid),
+    UserRole.customer || UserRole.cafeOwner || UserRole.cashier => repo.watchOrders(customerId: user.uid),
   };
 });
 

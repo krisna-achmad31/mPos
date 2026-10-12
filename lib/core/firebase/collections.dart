@@ -24,4 +24,17 @@ abstract final class Collections {
 
   /// Data contoh MODE DEMO laporan; tidak pernah dicampur dengan nota asli.
   static const demoDays = 'demo_days';
+
+  /// Top-level: satu dokumen per POS kopi (id = uid pelanggan pemiliknya); datanya di subkoleksi.
+  static const cafes = 'cafes';
+
+  /// POS kopi: bahan baku (stok detail, mis. gram / ml).
+  static const ingredients = 'ingredients';
+
+  /// POS kopi: resep per menu (id dokumen = id menu di `products`).
+  static const recipes = 'recipes';
+
+  /// Distributor: kode promo aktivasi premium POS kopi; pemakaiannya di subkoleksi [redemptions].
+  static const premiumCodes = 'premium_codes';
+  static const redemptions = 'redemptions';
 }

@@ -6,6 +6,7 @@ import '../../../../core/firebase/collections.dart';
 import '../../../../core/firebase/firestore_parsing.dart';
 import '../../../../core/firebase/tenant_store.dart';
 import '../../../auth/domain/entities/app_user.dart';
+import '../../../cafe/data/cafe_account_repository.dart';
 import '../../domain/entities/cart_line.dart';
 import '../../domain/entities/invoice.dart';
 import '../../domain/entities/sales_order.dart';
@@ -151,15 +152,21 @@ class FirestoreSalesRepository implements SalesRepository {
   @override
   Future<void> moveStatus({required SalesOrder order, required OrderStatus to, required AppUser by}) =>
       _db.runTransaction((tx) async {
-        final current = await _currentOrder(tx, order.id);
+        final snap = await tx.get(_orders.doc(order.id));
+        if (!snap.exists) throw const AppException('Pesanan tidak ditemukan.');
+        final current = SalesModels.orderFromMap(snap.id, snap.data()!);
         if (!OrderFlow.canMove(current, to, by)) {
           throw AppException('Status ${current.status.label} tidak bisa diubah ke ${to.label}.');
         }
+        // Barang diterima: stok POS kopi pelanggan ikut bertambah di transaksi yang sama.
+        final cafeStock = to == OrderStatus.done ? await CafeStockReceipt.read(tx, _store, current, snap.data()!) : null;
         tx.update(_orders.doc(order.id), {
           'status': to.name,
           '${to.name}At': FieldValue.serverTimestamp(),
           '${to.name}By': by.uid,
+          if (cafeStock != null) 'cafeStockSynced': true,
         });
+        cafeStock?.write(tx, _store, userId: by.uid);
       });
 
   Future<SalesOrder> _currentOrder(Transaction tx, String id) async {

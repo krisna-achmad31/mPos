@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/auth_providers.dart';
+import '../../features/cafe/cafe_providers.dart';
+import '../../features/cafe/presentation/views/cafe_locked_view.dart';
 import '../../features/auth/domain/entities/user_role.dart';
 import '../../features/auth/presentation/viewmodels/auth_view_model.dart';
 import '../config/app_config.dart';
@@ -27,6 +29,7 @@ const ownerNav = [
   NavItem('Pengeluaran', Icons.payments_outlined, '/owner/expenses'),
   NavItem('Laporan', Icons.bar_chart, '/owner/reports'),
   NavItem('Pengguna', Icons.group_outlined, '/owner/users'),
+  NavItem('Premium POS Kopi', Icons.workspace_premium_outlined, '/owner/premium'),
   NavItem('Pengaturan', Icons.settings_outlined, '/owner/settings'),
 ];
 
@@ -42,6 +45,23 @@ const customerNav = [
   NavItem('Pesanan saya', Icons.inbox_outlined, '/shop/orders'),
   NavItem('Nota saya', Icons.receipt_long_outlined, '/shop/invoices'),
   NavItem('Belanja saya', Icons.insights_outlined, '/shop/spending'),
+  NavItem('POS Kopi', Icons.coffee_maker_outlined, '/shop/cafe'),
+];
+
+const cafeOwnerNav = [
+  NavItem('Dashboard', Icons.dashboard_outlined, '/cafe'),
+  NavItem('Kasir', Icons.point_of_sale, '/cafe/pos'),
+  NavItem('Riwayat struk', Icons.receipt_long_outlined, '/cafe/receipts'),
+  NavItem('Menu & resep', Icons.menu_book_outlined, '/cafe/menu'),
+  NavItem('Stok bahan', Icons.inventory_2_outlined, '/cafe/stock'),
+  NavItem('Pengeluaran', Icons.payments_outlined, '/cafe/expenses'),
+  NavItem('Laporan', Icons.bar_chart, '/cafe/reports'),
+  NavItem('Pengaturan & printer', Icons.settings_outlined, '/cafe/settings'),
+];
+
+const cashierNav = [
+  NavItem('Kasir', Icons.point_of_sale, '/cafe/pos'),
+  NavItem('Riwayat struk', Icons.receipt_long_outlined, '/cafe/receipts'),
 ];
 
 final shellScaffoldKey = GlobalKey<ScaffoldState>();
@@ -55,6 +75,8 @@ List<NavItem> navFor(UserRole role) => switch (role) {
   UserRole.owner => ownerNav,
   UserRole.spv => spvNav,
   UserRole.customer => customerNav,
+  UserRole.cafeOwner => cafeOwnerNav,
+  UserRole.cashier => cashierNav,
 };
 
 /// Kerangka navigasi: menu samping permanen di layar lebar, drawer di HP.
@@ -101,12 +123,27 @@ class AppShell extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.fromLTRB(28, 0, 16, 12),
               child: Text(
-                '${user.role.label} · ${ref.watch(currentDistributorProvider).value?.name ?? '…'}',
+                user.role.isCafe
+                    ? '${user.role.label}${user.role == UserRole.cashier ? ' ${user.name}' : ''} · POS Kopi'
+                    : '${user.role.label} · ${ref.watch(currentDistributorProvider).value?.name ?? '…'}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
             for (final item in items) NavigationDrawerDestination(icon: Icon(item.icon), label: Text(item.label)),
             const Divider(indent: 28, endIndent: 28),
+            // Owner Kopi = akun Customer yang sama: kembali berbelanja ke distributor.
+            if (user.role == UserRole.cafeOwner)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: ListTile(
+                  leading: const Icon(Icons.storefront_outlined),
+                  title: const Text('Belanja ke distributor'),
+                  onTap: () {
+                    if (!wide) shellScaffoldKey.currentState?.closeDrawer();
+                    ref.read(authViewModelProvider.notifier).setCafeMode(false);
+                  },
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: ListTile(
@@ -120,15 +157,17 @@ class AppShell extends ConsumerWidget {
       },
     );
 
+    // POS kopi tanpa premium aktif: semua halaman diganti layar terkunci (data tetap tersimpan).
+    final body = user.role.isCafe && !ref.watch(cafePremiumProvider) ? const CafeLockedView() : child;
     if (wide) {
       return Row(
         children: [
           SizedBox(width: 280, child: drawer),
           const VerticalDivider(width: 1),
-          Expanded(child: child),
+          Expanded(child: body),
         ],
       );
     }
-    return Scaffold(key: shellScaffoldKey, drawer: drawer, body: child);
+    return Scaffold(key: shellScaffoldKey, drawer: drawer, body: body);
   }
 }

@@ -21,6 +21,8 @@ abstract final class OrderFlow {
         };
       case UserRole.spv:
         return to == OrderStatus.delivered && from == OrderStatus.shipped && order.courierId == user.uid;
+      case UserRole.cafeOwner || UserRole.cashier:
+        return false;
       case UserRole.customer:
         if (order.customerId != user.uid) return false;
         return (to == OrderStatus.done && from == OrderStatus.delivered) ||

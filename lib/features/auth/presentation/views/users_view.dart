@@ -40,7 +40,7 @@ class UsersView extends ConsumerWidget {
                     value: user.role,
                     onChanged: isMe ? null : (role) => role == null ? null : vm.changeRole(user, role),
                     items: [
-                      for (final role in UserRole.values) DropdownMenuItem(value: role, child: Text(role.label)),
+                      for (final role in [UserRole.owner, UserRole.spv, UserRole.customer]) DropdownMenuItem(value: role, child: Text(role.label)),
                     ],
                   ),
                   Switch(

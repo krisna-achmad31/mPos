@@ -171,6 +171,36 @@ class _RolePickerViewState extends ConsumerState<RolePickerView> {
                       ],
                     ),
                   ),
+                  Card(
+                    margin: EdgeInsets.zero,
+                    child: Column(
+                      children: [
+                        const ListTile(
+                          leading: Icon(Icons.coffee_maker_outlined),
+                          title: Text('POS Kopi (premium)'),
+                          subtitle: Text(
+                            'Kasir kedai kopi milik pelanggan di atas. Stok bahan bertambah otomatis dari pesanan '
+                            'distributor yang diterima. Aktifkan dulu dengan kode promo dari Owner distributor.',
+                          ),
+                        ),
+                        for (var i = 1; i <= DemoAuthRepository.demoCustomers.length; i++)
+                          for (final role in [UserRole.cafeOwner, UserRole.cashier])
+                            ListTile(
+                              enabled: !busy,
+                              contentPadding: const EdgeInsets.only(left: 72, right: 16),
+                              leading: Icon(role == UserRole.cafeOwner ? Icons.storefront_outlined : Icons.point_of_sale, size: 22),
+                              title: Text('${DemoAuthRepository.demoCustomers[i - 1].store} — ${role.label}'),
+                              subtitle: Text(
+                                role == UserRole.cafeOwner
+                                    ? '${DemoAuthRepository.demoCustomers[i - 1].name}: menu, resep, stok, laporan'
+                                    : '${DemoAuthRepository.demoCashier(distributor, i).name}: kasir & riwayat struk',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => _selectRole(distributor, role, customer: i),
+                            ),
+                      ],
+                    ),
+                  ),
                 ],
               ],
             ),

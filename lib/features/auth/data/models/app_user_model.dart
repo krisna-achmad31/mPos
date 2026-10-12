@@ -13,6 +13,7 @@ abstract final class AppUserModel {
         storeName: readString(map['storeName']),
         phone: readString(map['phone']),
         address: readString(map['address']),
+        cafeId: readString(map['cafeId']),
       );
 
   static Map<String, dynamic> toMap(AppUser user) => {
@@ -24,5 +25,6 @@ abstract final class AppUserModel {
         'storeName': user.storeName,
         'phone': user.phone,
         'address': user.address,
+        if (user.cafeId.isNotEmpty) 'cafeId': user.cafeId,
       };
 }

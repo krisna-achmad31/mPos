@@ -11,6 +11,15 @@ import '../../features/auth/presentation/views/login_view.dart';
 import '../../features/auth/presentation/views/register_view.dart';
 import '../../features/auth/presentation/views/role_picker_view.dart';
 import '../../features/auth/presentation/views/users_view.dart';
+import '../../features/cafe/presentation/views/cafe_access_view.dart';
+import '../../features/cafe/presentation/views/cafe_dashboard_view.dart';
+import '../../features/cafe/presentation/views/cafe_pos_view.dart';
+import '../../features/cafe/presentation/views/cafe_receipts_view.dart';
+import '../../features/cafe/presentation/views/cafe_settings_view.dart';
+import '../../features/cafe/presentation/views/ingredients_view.dart';
+import '../../features/cafe/presentation/views/menu_form_view.dart';
+import '../../features/cafe/presentation/views/menu_list_view.dart';
+import '../../features/cafe/presentation/views/premium_codes_view.dart';
 import '../../features/catalog/presentation/views/cart_view.dart';
 import '../../features/catalog/presentation/views/catalog_view.dart';
 import '../../features/catalog/presentation/views/my_spending_view.dart';
@@ -34,6 +43,8 @@ String homeFor(UserRole role) => switch (role) {
       UserRole.owner => '/owner',
       UserRole.spv => '/spv',
       UserRole.customer => '/shop',
+      UserRole.cafeOwner => '/cafe',
+      UserRole.cashier => '/cafe/pos',
     };
 
 /// Area URL yang boleh dibuka tiap role.
@@ -41,6 +52,9 @@ bool canAccess(UserRole role, String location) => switch (role) {
       UserRole.owner => location.startsWith('/owner'),
       UserRole.spv => location.startsWith('/spv'),
       UserRole.customer => location.startsWith('/shop'),
+      UserRole.cafeOwner => location.startsWith('/cafe'),
+      // Kasir: hanya kasir dan riwayat struk.
+      UserRole.cashier => location.startsWith('/cafe/pos') || location.startsWith('/cafe/receipts'),
     };
 
 /// Keputusan redirect murni, terpisah dari GoRouter agar mudah dites.
@@ -59,7 +73,8 @@ String? resolveRedirect(AsyncValue<AppUser?> auth, String location) {
 
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ValueNotifier<AsyncValue<AppUser?>>(const AsyncLoading());
-  ref.listen(authStateProvider, (_, next) => auth.value = next, fireImmediately: true);
+  // Sesi efektif: ikut berubah saat Customer masuk / keluar POS kopi.
+  ref.listen(sessionProvider, (_, next) => auth.value = next, fireImmediately: true);
   ref.onDispose(auth.dispose);
 
   ShellRoute shell(List<RouteBase> routes) => ShellRoute(
@@ -98,6 +113,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         page('/owner/expenses', (_) => const ExpensesView()),
         page('/owner/reports', (_) => const ReportsView()),
         page('/owner/users', (_) => const UsersView()),
+        page('/owner/premium', (_) => const PremiumCodesView()),
         page('/owner/settings', (_) => const SettingsView()),
       ]),
       shell([
@@ -114,6 +130,20 @@ final routerProvider = Provider<GoRouter>((ref) {
         page('/shop/invoices', (_) => const InvoicesView()),
         page('/shop/invoices/:id', (s) => InvoiceView(invoiceId: s.pathParameters['id']!)),
         page('/shop/spending', (_) => const MySpendingView()),
+        page('/shop/cafe', (_) => const CafeAccessView()),
+      ]),
+      shell([
+        page('/cafe', (_) => const CafeDashboardView()),
+        page('/cafe/pos', (_) => const CafePosView()),
+        page('/cafe/receipts', (_) => const CafeReceiptsView()),
+        page('/cafe/receipts/:id', (s) => CafeReceiptView(invoiceId: s.pathParameters['id']!)),
+        page('/cafe/menu', (_) => const MenuListView()),
+        page('/cafe/menu/new', (_) => const MenuFormView()),
+        page('/cafe/menu/:id', (s) => MenuFormView(menuId: s.pathParameters['id'])),
+        page('/cafe/stock', (_) => const IngredientsView()),
+        page('/cafe/expenses', (_) => const ExpensesView()),
+        page('/cafe/reports', (_) => const ReportsView()),
+        page('/cafe/settings', (_) => const CafeSettingsView()),
       ]),
     ],
   );

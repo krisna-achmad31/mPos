@@ -9,6 +9,7 @@ import '../../../../core/utils/dates.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/async_value_view.dart';
 import '../../../../core/widgets/feedback.dart';
+import '../../../auth/auth_providers.dart';
 import '../../../sales/domain/entities/invoice.dart';
 import '../../data/demo_report_repository.dart';
 import '../../domain/demo_invoice_editor.dart';
@@ -113,6 +114,7 @@ class _DemoBanner extends ConsumerWidget {
     final hasDay = day != null && filter.period == ReportPeriod.day;
     final used = ref.watch(salesReportProvider).value?.invoices.fold(0, (s, i) => s + i.totals.total) ?? 0;
     final busy = ref.watch(demoDataViewModelProvider).isLoading;
+    final cafe = ref.watch(isCafeWorkspaceProvider);
 
     return Container(
       margin: const EdgeInsets.only(top: 12),
@@ -139,7 +141,7 @@ class _DemoBanner extends ConsumerWidget {
             Text(
               'Target ${formatRupiah(day.target)} · terpakai ${formatRupiah(used)} · '
               'sisa ${formatRupiah(day.target - used)} · '
-              '${day.useDemoCatalog ? 'katalog demo distributor cafe' : 'produk asli'}. '
+              '${day.useDemoCatalog ? (cafe ? 'menu contoh kafe' : 'katalog demo distributor cafe') : (cafe ? 'menu asli' : 'produk asli')}. '
               'Ketuk ikon pensil di daftar transaksi untuk mengubah jam atau qty.',
               style: TextStyle(color: scheme.onTertiaryContainer),
             ),
@@ -229,6 +231,7 @@ class _DemoGeneratorDialogState extends ConsumerState<_DemoGeneratorDialog> {
   Widget build(BuildContext context) {
     final hours = [for (var h = 0; h <= 24; h++) h];
     final busy = ref.watch(demoDataViewModelProvider).isLoading;
+    final cafe = ref.watch(isCafeWorkspaceProvider);
     return AlertDialog(
       title: const Text('Buat data demo'),
       content: SizedBox(
@@ -243,18 +246,30 @@ class _DemoGeneratorDialogState extends ConsumerState<_DemoGeneratorDialog> {
               'Total hari itu tidak akan melebihi target yang Anda isi.',
             ),
             SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(value: true, label: Text('Katalog demo cafe'), icon: Icon(Icons.coffee_outlined)),
-                ButtonSegment(value: false, label: Text('Produk asli'), icon: Icon(Icons.inventory_2_outlined)),
+              segments: [
+                ButtonSegment(
+                  value: true,
+                  label: Text(cafe ? 'Menu contoh' : 'Katalog demo cafe'),
+                  icon: const Icon(Icons.coffee_outlined),
+                ),
+                ButtonSegment(
+                  value: false,
+                  label: Text(cafe ? 'Menu asli' : 'Produk asli'),
+                  icon: const Icon(Icons.inventory_2_outlined),
+                ),
               ],
               selected: {_useDemoCatalog},
               onSelectionChanged: (v) => setState(() => _useDemoCatalog = v.first),
             ),
             Text(
-              _useDemoCatalog
-                  ? 'Contoh distributor ke cafe: biji kopi, susu, sirup, bubuk minuman, kemasan. '
-                        'Pelanggan contoh berupa cafe, pembelian grosir.'
-                  : 'Memakai produk & harga asli Anda (stok asli tidak berubah).',
+              switch ((cafe, _useDemoCatalog)) {
+                (true, true) => 'Contoh menu kedai kopi: kopi, non kopi, makanan. '
+                    'Pembeli umum, 1–2 cup per struk, bayar tunai / QRIS.',
+                (true, false) => 'Memakai menu & harga asli Anda (stok bahan tidak berubah).',
+                (false, true) => 'Contoh distributor ke cafe: biji kopi, susu, sirup, bubuk minuman, kemasan. '
+                    'Pelanggan contoh berupa cafe, pembelian grosir.',
+                (false, false) => 'Memakai produk & harga asli Anda (stok asli tidak berubah).',
+              },
               style: Theme.of(context).textTheme.bodySmall,
             ),
             OutlinedButton.icon(
@@ -321,14 +336,16 @@ class _DemoGeneratorDialogState extends ConsumerState<_DemoGeneratorDialog> {
   }
 }
 
-class _ReportBody extends StatelessWidget {
+class _ReportBody extends ConsumerWidget {
   const _ReportBody({required this.report, required this.period});
 
   final SalesReport report;
   final ReportPeriod period;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // POS kopi: tanpa pesanan online, pelanggan tetap, dan stok produk (stok bahan ada di menu Stok bahan).
+    final cafe = ref.watch(isCafeWorkspaceProvider);
     final r = report;
     final busiest = r.busiestHour;
     final isDay = period == ReportPeriod.day;
@@ -407,6 +424,7 @@ class _ReportBody extends StatelessWidget {
               title: 'Sumber penjualan',
               child: DonutChart(items: r.bySource),
             );
+            if (cafe) return payment;
             return wide
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -420,8 +438,8 @@ class _ReportBody extends StatelessWidget {
           },
         ),
         SectionCard(
-          title: 'Produk terlaris',
-          subtitle: '${r.products.length} produk terjual · urut omzet',
+          title: cafe ? 'Menu terlaris' : 'Produk terlaris',
+          subtitle: '${r.products.length} ${cafe ? 'menu' : 'produk'} terjual · urut omzet',
           child: _ProductTable(products: r.products),
         ),
         LayoutBuilder(
@@ -435,6 +453,7 @@ class _ReportBody extends StatelessWidget {
               title: 'Pelanggan teratas',
               child: ProportionList(items: r.topCustomers),
             );
+            if (cafe) return category;
             return wide
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -456,7 +475,7 @@ class _ReportBody extends StatelessWidget {
             title: 'Pengeluaran per kategori',
             child: ProportionList(items: r.expensesByCategory),
           ),
-        if (!r.isDemo)
+        if (!r.isDemo && !cafe)
           SectionCard(
             title: 'Stok',
             subtitle: 'Kondisi saat ini',
@@ -598,15 +617,16 @@ class _ProductTable extends StatelessWidget {
   }
 }
 
-class _TransactionList extends StatelessWidget {
+class _TransactionList extends ConsumerWidget {
   const _TransactionList({required this.report, required this.showDate});
 
   final SalesReport report;
   final bool showDate;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final text = Theme.of(context).textTheme;
+    final invoiceBase = ref.watch(isCafeWorkspaceProvider) ? '/cafe/receipts' : '/owner/invoices';
     return Column(
       children: [
         for (final inv in report.invoices.take(100))
@@ -637,7 +657,7 @@ class _TransactionList extends StatelessWidget {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: () => context.go('/owner/invoices/${inv.id}'),
+                    onPressed: () => context.go('$invoiceBase/${inv.id}'),
                     child: const Text('Buka nota'),
                   ),
                 ),
