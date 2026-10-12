@@ -6,6 +6,7 @@ import '../../../../core/router/app_shell.dart';
 import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
+import '../../../../core/widgets/product_image_view.dart';
 import '../../../stock/presentation/views/stock_opname_dialog.dart';
 import '../../../reports/domain/demo_catalog.dart';
 import '../../domain/entities/product.dart';
@@ -221,13 +222,27 @@ class _ProductCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: 14,
               children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: low ? scheme.error : scheme.primaryContainer,
-                  child: Icon(
-                    low ? Icons.priority_high : categoryIcon(p.category),
-                    color: low ? scheme.onError : scheme.onPrimaryContainer,
-                  ),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ProductImageView(
+                      imageBase64: p.imageBase64,
+                      fallbackIcon: low ? Icons.priority_high : categoryIcon(p.category),
+                      highlight: low,
+                      size: 64,
+                    ),
+                    // Foto menutupi tanda restock, jadi tampilkan lencana kecil.
+                    if (low && p.hasImage)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: CircleAvatar(
+                          radius: 10,
+                          backgroundColor: scheme.error,
+                          child: Icon(Icons.priority_high, size: 14, color: scheme.onError),
+                        ),
+                      ),
+                  ],
                 ),
                 Expanded(
                   child: Column(

@@ -7,11 +7,13 @@ import '../../../../core/utils/money.dart';
 import '../../../../core/widgets/async_value_view.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
+import '../../../../core/widgets/product_image_view.dart';
 import '../../../auth/auth_providers.dart';
 import '../../../pricing/domain/services/pricing_service.dart';
 import '../../../pricing/pricing_providers.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/presentation/viewmodels/product_view_models.dart';
+import '../../../products/presentation/views/product_list_view.dart' show categoryIcon;
 import '../../../products/product_providers.dart';
 import '../viewmodels/customer_cart_view_model.dart';
 import '../../../../core/router/app_shell.dart';
@@ -28,7 +30,8 @@ class CatalogView extends ConsumerWidget {
     final now = ref.watch(clockProvider)();
 
     return Scaffold(
-      appBar: AppBar(leading: shellMenuButton(context), 
+      appBar: AppBar(
+        leading: shellMenuButton(context),
         title: const Text('Katalog'),
         actions: [
           IconButton(
@@ -60,7 +63,7 @@ class CatalogView extends ConsumerWidget {
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 280,
-                    mainAxisExtent: 250,
+                    mainAxisExtent: 370,
                     crossAxisSpacing: 12,
                     mainAxisSpacing: 12,
                   ),
@@ -92,55 +95,82 @@ class _ProductCard extends ConsumerWidget {
     final out = product.isOutOfStock;
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.titleSmall),
-            const SizedBox(height: 4),
-            if (promoPrice != null) ...[
-              Text(formatRupiah(product.sellPrice),
-                  style: text.bodySmall?.copyWith(decoration: TextDecoration.lineThrough)),
-              Text(formatRupiah(promoPrice!), style: text.titleMedium?.copyWith(color: scheme.primary)),
-            ] else
-              Text(formatRupiah(product.sellPrice), style: text.titleMedium),
-            Text('per ${product.unit}', style: text.bodySmall),
-            if (product.hasWholesale)
-              Text('Grosir ≥${product.wholesaleMinQty}: ${formatRupiah(product.wholesalePrice)}', style: text.bodySmall),
-            for (final pack in product.packsBySize)
-              Text('${pack.name[0].toUpperCase()}${pack.name.substring(1)} isi ${pack.contents}: ${formatRupiah(pack.price)}',
-                  style: text.bodySmall?.copyWith(color: scheme.primary)),
-            const Spacer(),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    out ? 'Habis' : (product.trackStock && product.stock <= product.minStock ? 'Stok terbatas' : 'Tersedia'),
-                    style: text.bodySmall?.copyWith(color: out ? scheme.error : null),
-                  ),
-                ),
-                for (final pack in product.packsBySize.reversed.take(2))
-                  Padding(
-                    padding: const EdgeInsets.only(right: 4),
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                      ),
-                      onPressed: out ? null : () => _add(context, ref, qty: pack.contents),
-                      child: Text('+${pack.name}'),
-                    ),
-                  ),
-                IconButton.filledTonal(
-                  tooltip: '+1 ${product.unit}',
-                  icon: const Icon(Icons.add_shopping_cart),
-                  onPressed: out ? null : () => _add(context, ref),
-                ),
-              ],
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 130,
+            child: ProductImageView(
+              imageBase64: product.imageBase64,
+              fallbackIcon: categoryIcon(product.category),
+              borderRadius: 0,
             ),
-          ],
-        ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.titleSmall),
+                  const SizedBox(height: 4),
+                  if (promoPrice != null) ...[
+                    Text(
+                      formatRupiah(product.sellPrice),
+                      style: text.bodySmall?.copyWith(decoration: TextDecoration.lineThrough),
+                    ),
+                    Text(formatRupiah(promoPrice!), style: text.titleMedium?.copyWith(color: scheme.primary)),
+                  ] else
+                    Text(formatRupiah(product.sellPrice), style: text.titleMedium),
+                  Text('per ${product.unit}', style: text.bodySmall),
+                  if (product.hasWholesale)
+                    Text(
+                      'Grosir ≥${product.wholesaleMinQty}: ${formatRupiah(product.wholesalePrice)}',
+                      style: text.bodySmall,
+                    ),
+                  for (final pack in product.packsBySize)
+                    Text(
+                      '${pack.name[0].toUpperCase()}${pack.name.substring(1)} isi ${pack.contents}: ${formatRupiah(pack.price)}',
+                      style: text.bodySmall?.copyWith(color: scheme.primary),
+                    ),
+                  const Spacer(),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          out
+                              ? 'Habis'
+                              : (product.trackStock && product.stock <= product.minStock
+                                    ? 'Stok terbatas'
+                                    : 'Tersedia'),
+                          style: text.bodySmall?.copyWith(color: out ? scheme.error : null),
+                        ),
+                      ),
+                      for (final pack in product.packsBySize.reversed.take(2))
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                            ),
+                            onPressed: out ? null : () => _add(context, ref, qty: pack.contents),
+                            child: Text('+${pack.name}'),
+                          ),
+                        ),
+                      IconButton.filledTonal(
+                        tooltip: '+1 ${product.unit}',
+                        icon: const Icon(Icons.add_shopping_cart),
+                        onPressed: out ? null : () => _add(context, ref),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,13 +1,18 @@
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/money.dart';
+import '../../../../core/utils/product_image.dart';
 import '../../../../core/widgets/feedback.dart';
+import '../../../../core/widgets/product_image_view.dart';
 import '../../domain/entities/product.dart';
 import '../../product_providers.dart';
 import '../viewmodels/product_view_models.dart';
+import 'product_list_view.dart' show categoryIcon;
 
 /// Tambah / ubah produk. [productId] null berarti produk baru.
 class ProductFormView extends ConsumerWidget {
@@ -68,6 +73,24 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   late final _minStock = TextEditingController(text: _num(widget.product?.minStock));
   late bool _trackStock = widget.product?.trackStock ?? true;
   late bool _active = widget.product?.active ?? true;
+  late String _image = widget.product?.imageBase64 ?? '';
+  bool _processingImage = false;
+
+  Future<void> _pickImage() async {
+    final file = await FilePicker.pickFile(type: FileType.image);
+    if (file == null) return;
+    setState(() => _processingImage = true);
+    try {
+      final bytes = await file.xFile.readAsBytes();
+      // Di HP diproses di isolate lain agar layar tidak macet.
+      final encoded = await compute(encodeProductImage, bytes);
+      if (mounted) setState(() => _image = encoded);
+    } catch (e) {
+      if (mounted) showMessage(context, '$e', isError: true);
+    } finally {
+      if (mounted) setState(() => _processingImage = false);
+    }
+  }
 
   static String _num(int? v) => v == null || v == 0 ? '' : '$v';
 
@@ -106,6 +129,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       minStock: parseRupiah(_minStock.text),
       trackStock: _trackStock,
       active: _active,
+      imageBase64: _image,
     );
     final ok = await ref
         .read(productFormViewModelProvider.notifier)
@@ -150,6 +174,13 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   spacing: 16,
                   children: [
+                    _ImageField(
+                      imageBase64: _image,
+                      fallbackIcon: categoryIcon(_category ?? ''),
+                      busy: _processingImage,
+                      onPick: _pickImage,
+                      onRemove: () => setState(() => _image = ''),
+                    ),
                     field(_name, 'Nama produk', required: true),
                     Row(spacing: 12, children: [
                       Expanded(child: field(_sku, 'SKU')),
@@ -205,7 +236,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                       onChanged: (v) => setState(() => _active = v),
                     ),
                     FilledButton.icon(
-                      onPressed: state.isLoading ? null : _save,
+                      onPressed: state.isLoading || _processingImage ? null : _save,
                       icon: const Icon(Icons.save),
                       label: const Text('Simpan'),
                     ),
@@ -260,6 +291,67 @@ class _CategoryField extends ConsumerWidget {
           tooltip: 'Tambah kategori',
           icon: const Icon(Icons.add_circle_outline),
           onPressed: () => _add(context, ref),
+        ),
+      ],
+    );
+  }
+}
+
+/// Foto produk: pratinjau + unggah / ganti / hapus. Tanpa foto memakai ikon kategori.
+class _ImageField extends StatelessWidget {
+  const _ImageField({
+    required this.imageBase64,
+    required this.fallbackIcon,
+    required this.busy,
+    required this.onPick,
+    required this.onRemove,
+  });
+
+  final String imageBase64;
+  final IconData fallbackIcon;
+  final bool busy;
+  final VoidCallback onPick;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = imageBase64.isNotEmpty;
+    return Row(
+      spacing: 16,
+      children: [
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            ProductImageView(imageBase64: imageBase64, fallbackIcon: fallbackIcon, size: 96),
+            if (busy) const CircularProgressIndicator(),
+          ],
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 4,
+            children: [
+              Text('Foto produk', style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                busy
+                    ? 'Memproses foto…'
+                    : 'JPG / PNG / WebP. Otomatis diperkecil ke $productImageMaxSide px. '
+                        'Tanpa foto, produk memakai gambar default.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : onPick,
+                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    label: Text(hasImage ? 'Ganti foto' : 'Unggah foto'),
+                  ),
+                  if (hasImage) TextButton(onPressed: busy ? null : onRemove, child: const Text('Hapus')),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );

@@ -20,6 +20,8 @@ abstract final class ProductModel {
           for (final m in readMapList(map['packs']))
             ProductPack(name: readString(m['name']), contents: readInt(m['contents']), price: readInt(m['price'])),
         ],
+        // Produk lama tidak punya field ini -> '' -> gambar default.
+        imageBase64: readString(map['imageBase64']),
       );
 
   /// Tanpa field `stock`: stok hanya berubah lewat transaksi stok.
@@ -40,6 +42,7 @@ abstract final class ProductModel {
           for (final pack in p.packs.where((x) => x.isValid))
             {'name': pack.name.trim(), 'contents': pack.contents, 'price': pack.price},
         ],
+        'imageBase64': p.imageBase64,
       };
 
   static ProductCost costFromMap(String productId, Map<String, dynamic>? map) => ProductCost(

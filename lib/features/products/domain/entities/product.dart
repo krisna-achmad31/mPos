@@ -37,6 +37,7 @@ class Product extends Equatable {
     this.stock = 0,
     this.active = true,
     this.packs = const [],
+    this.imageBase64 = '',
   });
 
   final String id;
@@ -61,6 +62,11 @@ class Product extends Equatable {
 
   /// Harga per kemasan (karton/ball/pouch). Pembelian otomatis dipecah ke kemasan terbesar dulu.
   final List<ProductPack> packs;
+
+  /// Foto produk (JPEG, base64). Kosong untuk produk lama / tanpa foto: tampilan memakai gambar default.
+  final String imageBase64;
+
+  bool get hasImage => imageBase64.isNotEmpty;
 
   /// Kemasan valid, isi terbesar dulu.
   List<ProductPack> get packsBySize => packs.where((p) => p.isValid).toList()..sort((a, b) => b.contents.compareTo(a.contents));
@@ -92,6 +98,7 @@ class Product extends Equatable {
     int? stock,
     bool? active,
     List<ProductPack>? packs,
+    String? imageBase64,
   }) =>
       Product(
         id: id ?? this.id,
@@ -108,12 +115,13 @@ class Product extends Equatable {
         stock: stock ?? this.stock,
         active: active ?? this.active,
         packs: packs ?? this.packs,
+        imageBase64: imageBase64 ?? this.imageBase64,
       );
 
   @override
   List<Object?> get props => [
         id, name, sku, barcode, category, unit, sellPrice, wholesalePrice, wholesaleMinQty,
-        minStock, trackStock, stock, active, packs,
+        minStock, trackStock, stock, active, packs, imageBase64,
       ];
 }
 
