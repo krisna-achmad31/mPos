@@ -174,7 +174,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   spacing: 16,
                   children: [
-                    _ImageField(
+                    ProductImageField(
                       imageBase64: _image,
                       fallbackIcon: categoryIcon(_category ?? ''),
                       busy: _processingImage,
@@ -297,9 +297,10 @@ class _CategoryField extends ConsumerWidget {
   }
 }
 
-/// Foto produk: pratinjau + unggah / ganti / hapus. Tanpa foto memakai ikon kategori.
-class _ImageField extends StatelessWidget {
-  const _ImageField({
+/// Foto produk / menu: pratinjau + unggah / ganti / hapus. Tanpa foto memakai ikon kategori.
+class ProductImageField extends StatelessWidget {
+  const ProductImageField({
+    super.key,
     required this.imageBase64,
     required this.fallbackIcon,
     required this.busy,

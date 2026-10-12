@@ -16,6 +16,9 @@ enum BuyerProfile {
 
   /// Distributor (mis. ke cafe): lebih sedikit nota, banyak item & qty, hampir selalu pelanggan tetap.
   wholesale,
+
+  /// POS kopi: keranjang kecil (1–2 cup), pelanggan umum, bayar tunai / QRIS, ramai pagi & sore.
+  cafe,
 }
 
 /// Membuat transaksi contoh untuk MODE DEMO laporan.
@@ -33,6 +36,8 @@ class DemoSalesGenerator {
   BuyerProfile _profile = BuyerProfile.retail;
 
   bool get _wholesale => _profile == BuyerProfile.wholesale;
+
+  bool get _cafe => _profile == BuyerProfile.cafe;
 
   List<Invoice> generate({
     required DateTime date,
@@ -78,7 +83,7 @@ class DemoSalesGenerator {
         at: _time(date, openHour, closeHour),
         lines: lines,
         method: _method(),
-        customer: customerNames.isNotEmpty && _rnd.nextDouble() < (_wholesale ? 0.9 : 0.25)
+        customer: !_cafe && customerNames.isNotEmpty && _rnd.nextDouble() < (_wholesale ? 0.9 : 0.25)
             ? customerNames[_rnd.nextInt(customerNames.length)]
             : 'UMUM',
       ));
@@ -104,7 +109,9 @@ class DemoSalesGenerator {
   List<CartLine> _basket(List<Product> products, Map<String, double> popularity, Map<String, int> used, int budget) {
     final lineCount = _wholesale
         ? _weighted({2: 20, 3: 30, 4: 25, 5: 15, 6: 10})
-        : _weighted({1: 45, 2: 30, 3: 15, 4: 7, 5: 3});
+        : _cafe
+            ? _weighted({1: 50, 2: 32, 3: 13, 4: 5})
+            : _weighted({1: 45, 2: 30, 3: 15, 4: 7, 5: 3});
     final lines = <CartLine>[];
     var spent = 0;
 
@@ -150,6 +157,11 @@ class DemoSalesGenerator {
   // Kebanyakan pembeli membeli 1–3; sesekali borongan (harga grosir bila ada).
   int _quantity(Product p) {
     final r = _rnd.nextDouble();
+    if (_cafe) {
+      if (r < 0.75) return 1;
+      if (r < 0.95) return 2;
+      return 3 + _rnd.nextInt(3);
+    }
     if (_wholesale) {
       if (r < 0.35) return 1 + _rnd.nextInt(3);
       if (r < 0.75) return 4 + _rnd.nextInt(5);
@@ -176,6 +188,13 @@ class DemoSalesGenerator {
   // Ramai pagi (09–11) dan sore (16–19), sedang saat makan siang, sepi menjelang tutup.
   DateTime _time(DateTime date, int open, int close) {
     double weight(int h) {
+      if (_cafe) {
+        if (h >= 7 && h <= 9) return 2.4;
+        if (h >= 15 && h <= 17) return 2.2;
+        if (h >= 19 && h <= 21) return 1.8;
+        if (h == 12 || h == 13) return 1.5;
+        return 0.8;
+      }
       if (h >= 9 && h <= 11) return 2.2;
       if (h >= 16 && h <= 19) return 2.0;
       if (h == 12 || h == 13) return 1.3;
@@ -199,6 +218,11 @@ class DemoSalesGenerator {
 
   PaymentMethod _method() {
     final r = _rnd.nextDouble();
+    if (_cafe) {
+      if (r < 0.45) return PaymentMethod.cash;
+      if (r < 0.93) return PaymentMethod.qris;
+      return PaymentMethod.transfer;
+    }
     if (r < 0.62) return PaymentMethod.cash;
     if (r < 0.92) return PaymentMethod.transfer;
     return PaymentMethod.credit;
@@ -236,7 +260,7 @@ class DemoSalesGenerator {
     return Invoice(
       id: 'demo-$day-$seq',
       number: 'DEMO-$day-${seq.toString().padLeft(4, '0')}',
-      source: d.customer != 'UMUM' && _rnd.nextBool() ? InvoiceSource.online : InvoiceSource.pos,
+      source: !_cafe && d.customer != 'UMUM' && _rnd.nextBool() ? InvoiceSource.online : InvoiceSource.pos,
       customerName: d.customer,
       lines: d.lines,
       totals: totals,

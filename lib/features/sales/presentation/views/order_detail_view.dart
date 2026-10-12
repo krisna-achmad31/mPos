@@ -28,7 +28,7 @@ class OrderDetailView extends ConsumerWidget {
     final back = switch (ref.watch(currentUserProvider).role) {
       UserRole.owner => '/owner/orders',
       UserRole.spv => '/spv/deliveries',
-      UserRole.customer => '/shop/orders',
+      UserRole.customer || UserRole.cafeOwner || UserRole.cashier => '/shop/orders',
     };
     return Scaffold(
       appBar: AppBar(title: const Text('Detail Pesanan'), leading: BackButton(onPressed: () => context.go(back))),
@@ -69,7 +69,7 @@ class _OrderBody extends ConsumerWidget {
     final base = switch (user.role) {
       UserRole.owner => '/owner',
       UserRole.spv => '/spv',
-      UserRole.customer => '/shop',
+      UserRole.customer || UserRole.cafeOwner || UserRole.cashier => '/shop',
     };
     final text = Theme.of(context).textTheme;
     bool can(OrderStatus to) => OrderFlow.canMove(order, to, user);
@@ -304,7 +304,8 @@ class _CreditInfo extends StatelessWidget {
         ? 'Tempo s/d $due · sudah lunas'
         : switch (role) {
             UserRole.spv => 'Pembayaran TEMPO s/d $due. Barang tetap diantar, tidak perlu menagih saat antar.',
-            UserRole.customer => 'Pembayaran tempo: barang dikirim dulu, bayar paling lambat $due.',
+            UserRole.customer || UserRole.cafeOwner || UserRole.cashier =>
+              'Pembayaran tempo: barang dikirim dulu, bayar paling lambat $due.',
             UserRole.owner => 'Pembayaran tempo s/d $due. Barang boleh dikirim sebelum lunas.',
           };
     return Container(

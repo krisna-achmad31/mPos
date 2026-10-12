@@ -20,8 +20,22 @@ class DemoAuthRepository implements AuthRepository {
   final _controller = StreamController<AppUser?>.broadcast();
   AppUser? _current;
 
-  static String demoUid(String distributorId, UserRole role, {int customer = 1}) =>
-      role == UserRole.customer ? 'demo-$distributorId-customer-$customer' : 'demo-$distributorId-${role.name}';
+  static String demoUid(String distributorId, UserRole role, {int customer = 1}) => switch (role) {
+        UserRole.customer || UserRole.cafeOwner => 'demo-$distributorId-customer-$customer',
+        UserRole.cashier => 'demo-$distributorId-cashier-$customer',
+        _ => 'demo-$distributorId-${role.name}',
+      };
+
+  /// Kasir uji di POS kopi milik pelanggan uji nomor [number].
+  static AppUser demoCashier(Distributor d, int number) => AppUser(
+        uid: demoUid(d.id, UserRole.cashier, customer: number),
+        name: const ['Sari', 'Bayu'][number - 1],
+        email: 'kasir$number@demo.local',
+        role: UserRole.cashier,
+        distributorId: d.id,
+        storeName: demoCustomers[number - 1].store,
+        cafeId: demoUid(d.id, UserRole.customer, customer: number),
+      );
 
   /// Dua pelanggan uji agar harga khusus / promo per akun bisa dibandingkan.
   static const demoCustomers = [
@@ -59,6 +73,8 @@ class DemoAuthRepository implements AuthRepository {
             distributorId: d.id,
           ),
         UserRole.customer => demoCustomer(d, customer),
+        UserRole.cafeOwner => demoCustomer(d, customer).asCafeOwner(),
+        UserRole.cashier => demoCashier(d, customer),
       };
 
   @override

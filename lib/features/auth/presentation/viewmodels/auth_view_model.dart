@@ -30,8 +30,12 @@ class AuthViewModel extends ActionViewModel {
           ));
 
   /// Mode pilot: masuk tanpa login sebagai [role] di [distributor].
-  Future<bool> selectRole(Distributor distributor, UserRole role, {int customer = 1}) =>
-      run(() => ref.read(demoAuthRepositoryProvider).selectRole(distributor, role, customer: customer));
+  /// [role] Owner Kopi = Customer uji nomor [customer] yang langsung membuka POS kopinya.
+  Future<bool> selectRole(Distributor distributor, UserRole role, {int customer = 1}) => run(() async {
+        ref.read(cafeModeProvider.notifier).set(role == UserRole.cafeOwner);
+        final loginRole = role == UserRole.cafeOwner ? UserRole.customer : role;
+        await ref.read(demoAuthRepositoryProvider).selectRole(distributor, loginRole, customer: customer);
+      });
 
   /// Mode pilot: membuat distributor baru. Mengembalikan null bila gagal.
   Future<Distributor?> createDistributor(String name) async {
@@ -58,7 +62,13 @@ class AuthViewModel extends ActionViewModel {
   Future<bool> resetPassword(String email) =>
       run(() => ref.read(authRepositoryProvider).sendPasswordReset(email));
 
-  Future<void> signOut() => ref.read(authRepositoryProvider).signOut();
+  /// Masuk / keluar POS kopi milik Customer yang sedang login.
+  void setCafeMode(bool on) => ref.read(cafeModeProvider.notifier).set(on);
+
+  Future<void> signOut() {
+    ref.read(cafeModeProvider.notifier).set(false);
+    return ref.read(authRepositoryProvider).signOut();
+  }
 }
 
 final authViewModelProvider = NotifierProvider<AuthViewModel, AsyncValue<void>>(AuthViewModel.new);

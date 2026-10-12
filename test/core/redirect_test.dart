@@ -19,6 +19,17 @@ void main() {
     expect(resolveRedirect(AsyncData(user(UserRole.owner)), '/owner/reports'), isNull);
   });
 
+  test('POS kopi: Owner Kopi di /cafe, Kasir hanya kasir & riwayat struk', () {
+    expect(resolveRedirect(AsyncData(user(UserRole.cafeOwner)), '/login'), '/cafe');
+    expect(resolveRedirect(AsyncData(user(UserRole.cafeOwner)), '/cafe/reports'), isNull);
+    expect(resolveRedirect(AsyncData(user(UserRole.cafeOwner)), '/shop'), '/cafe');
+    expect(resolveRedirect(AsyncData(user(UserRole.cashier)), '/login'), '/cafe/pos');
+    expect(resolveRedirect(AsyncData(user(UserRole.cashier)), '/cafe/receipts/x'), isNull);
+    expect(resolveRedirect(AsyncData(user(UserRole.cashier)), '/cafe/reports'), '/cafe/pos');
+    expect(resolveRedirect(AsyncData(user(UserRole.cashier)), '/cafe'), '/cafe/pos');
+    expect(resolveRedirect(AsyncData(user(UserRole.customer)), '/cafe/pos'), '/shop');
+  });
+
   test('akun nonaktif diarahkan ke /inactive', () {
     expect(resolveRedirect(AsyncData(user(UserRole.customer, active: false)), '/shop'), '/inactive');
   });
