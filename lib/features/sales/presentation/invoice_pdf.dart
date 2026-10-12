@@ -23,7 +23,7 @@ class InvoicePrintData {
 
   final Invoice invoice;
 
-  /// Nama di kop invoice, diambil dari data distributor.
+  /// Nama di kop invoice: nama toko di Pengaturan, atau nama distributor bila kosong.
   final String distributorName;
   final StoreSettings settings;
 
@@ -84,7 +84,7 @@ Future<Uint8List> buildInvoicePdf(InvoicePrintData data) {
   final inv = data.invoice;
   final s = data.settings;
   final t = inv.totals;
-  final name = (data.distributorName.isNotEmpty ? data.distributorName : s.storeName).toUpperCase();
+  final name = data.distributorName.toUpperCase();
   final logo = data.logoPng == null ? null : pw.MemoryImage(data.logoPng!);
   final notes = s.invoiceFooter.isNotEmpty ? s.invoiceFooter : _defaultNotes;
   final signer = s.signatureName.isNotEmpty ? s.signatureName : data.distributorName;

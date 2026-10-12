@@ -22,7 +22,15 @@ final distributorLogoProvider = StreamProvider<Uint8List?>(
 );
 
 class SettingsViewModel extends ActionViewModel {
-  Future<bool> save(StoreSettings settings) => run(() => ref.read(settingsRepositoryProvider).save(settings));
+  /// Nama toko = nama distributor: ikut diperbarui agar kop invoice, sidebar, dan pilihan distributor sama.
+  Future<bool> save(StoreSettings settings) => run(() async {
+        await ref.read(settingsRepositoryProvider).save(settings);
+        final name = settings.storeName.trim();
+        final distributor = await readReady(currentDistributorProvider.future);
+        if (name.isNotEmpty && distributor != null && distributor.name != name) {
+          await ref.read(distributorRepositoryProvider).rename(distributor.id, name);
+        }
+      });
 
   Future<bool> saveLogo(Uint8List png) => run(() async {
         validateLogoPng(png);

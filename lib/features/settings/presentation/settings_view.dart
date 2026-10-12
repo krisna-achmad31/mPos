@@ -86,7 +86,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
               spacing: 16,
               children: [
                 Text('Profil toko', style: Theme.of(context).textTheme.titleMedium),
-                TextField(controller: _name, decoration: const InputDecoration(labelText: 'Nama toko')),
+                TextField(controller: _name, decoration: const InputDecoration(labelText: 'Nama toko / distributor (kop invoice)')),
                 TextField(controller: _address, maxLines: 2, decoration: const InputDecoration(labelText: 'Alamat')),
                 TextField(controller: _phone, decoration: const InputDecoration(labelText: 'Telepon')),
                 TextField(

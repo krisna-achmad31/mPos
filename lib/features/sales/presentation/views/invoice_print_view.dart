@@ -40,7 +40,9 @@ class InvoicePrintView extends ConsumerWidget {
     final ready = !distributor.isLoading && !settings.isLoading && !logo.isLoading;
     final data = InvoicePrintData(
       invoice: invoice,
-      distributorName: distributor.value?.name ?? '',
+      distributorName: (settings.value?.storeName ?? '').trim().isNotEmpty
+          ? settings.value!.storeName.trim()
+          : distributor.value?.name ?? '',
       settings: settings.value ?? const StoreSettings(),
       logoPng: logo.value,
       customer: _customer(ref),

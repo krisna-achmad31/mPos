@@ -18,4 +18,6 @@ abstract interface class DistributorRepository {
   Stream<List<Distributor>> watchAll();
 
   Stream<Distributor?> watch(String id);
+
+  Future<void> rename(String id, String name);
 }

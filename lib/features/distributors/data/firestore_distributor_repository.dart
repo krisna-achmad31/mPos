@@ -40,4 +40,7 @@ class FirestoreDistributorRepository implements DistributorRepository {
   @override
   Stream<Distributor?> watch(String id) =>
       _col.doc(id).snapshots().map((s) => s.exists ? fromMap(s.id, s.data()!) : null);
+
+  @override
+  Future<void> rename(String id, String name) => _col.doc(id).update({'name': name.trim()});
 }
