@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:equatable/equatable.dart';
 
 class StoreSettings extends Equatable {
@@ -5,6 +7,7 @@ class StoreSettings extends Equatable {
     this.storeName = 'Toko Saya',
     this.address = '',
     this.phone = '',
+    this.email = '',
     this.taxEnabled = false,
     this.taxPercent = 11,
     this.bankInfo = '',
@@ -17,6 +20,7 @@ class StoreSettings extends Equatable {
   final String storeName;
   final String address;
   final String phone;
+  final String email;
   final bool taxEnabled;
   final double taxPercent;
 
@@ -35,6 +39,7 @@ class StoreSettings extends Equatable {
     String? storeName,
     String? address,
     String? phone,
+    String? email,
     bool? taxEnabled,
     double? taxPercent,
     String? bankInfo,
@@ -47,6 +52,7 @@ class StoreSettings extends Equatable {
         storeName: storeName ?? this.storeName,
         address: address ?? this.address,
         phone: phone ?? this.phone,
+        email: email ?? this.email,
         taxEnabled: taxEnabled ?? this.taxEnabled,
         taxPercent: taxPercent ?? this.taxPercent,
         bankInfo: bankInfo ?? this.bankInfo,
@@ -58,7 +64,7 @@ class StoreSettings extends Equatable {
 
   @override
   List<Object?> get props => [
-        storeName, address, phone, taxEnabled, taxPercent, bankInfo, receiptFooter, invoiceFooter,
+        storeName, address, phone, email, taxEnabled, taxPercent, bankInfo, receiptFooter, invoiceFooter,
         signatureName, defaultNoteType,
       ];
 }
@@ -67,4 +73,10 @@ abstract interface class SettingsRepository {
   Stream<StoreSettings> watch();
 
   Future<void> save(StoreSettings settings);
+
+  /// Logo distributor (PNG) untuk invoice; null bila belum diunggah.
+  Stream<Uint8List?> watchLogo();
+
+  /// [png] null = hapus logo.
+  Future<void> saveLogo(Uint8List? png);
 }

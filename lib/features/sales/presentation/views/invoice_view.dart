@@ -15,6 +15,7 @@ import '../../sales_providers.dart';
 import '../viewmodels/order_view_models.dart';
 import '../widgets/totals_table.dart';
 import '../widgets/line_text.dart';
+import 'invoice_print_view.dart';
 
 /// Nota / invoice. Dipakai Owner dan Customer.
 class InvoiceView extends ConsumerWidget {
@@ -26,7 +27,21 @@ class InvoiceView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final base = ref.watch(currentUserProvider).isOwner ? '/owner' : '/shop';
     return Scaffold(
-      appBar: AppBar(title: const Text('Invoice'), leading: BackButton(onPressed: () => context.go('$base/invoices'))),
+      appBar: AppBar(
+        title: const Text('Invoice'),
+        leading: BackButton(onPressed: () => context.go('$base/invoices')),
+        actions: [
+          if (ref.watch(invoiceProvider(invoiceId)).value case final invoice?)
+            TextButton.icon(
+              icon: const Icon(Icons.picture_as_pdf_outlined),
+              label: const Text('Cetak / PDF'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => InvoicePrintView(invoice: invoice)),
+              ),
+            ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: AsyncValueView(
         value: ref.watch(invoiceProvider(invoiceId)),
         data: (invoice) => invoice == null

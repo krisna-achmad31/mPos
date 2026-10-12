@@ -1,9 +1,19 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+
+/// Di web/desktop Flutter tidak menggeser list dengan drag mouse secara default,
+/// sehingga list (dan baris chip horizontal) terasa macet di Chrome. Izinkan semua perangkat.
+class AppScrollBehavior extends MaterialScrollBehavior {
+  const AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => PointerDeviceKind.values.toSet();
+}
 
 class MposApp extends ConsumerWidget {
   const MposApp({super.key});
@@ -13,6 +23,7 @@ class MposApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'mPOS Distributor',
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const AppScrollBehavior(),
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       routerConfig: ref.watch(routerProvider),
@@ -33,6 +44,7 @@ class FirebaseSetupApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      scrollBehavior: const AppScrollBehavior(),
       theme: AppTheme.light(),
       home: Scaffold(
         body: Center(

@@ -1,6 +1,8 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/png_logo.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../../../core/widgets/feedback.dart';
 import '../domain/store_settings.dart';
@@ -35,6 +37,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
   late final _name = TextEditingController(text: widget.initial.storeName);
   late final _address = TextEditingController(text: widget.initial.address);
   late final _phone = TextEditingController(text: widget.initial.phone);
+  late final _email = TextEditingController(text: widget.initial.email);
   late final _tax = TextEditingController(text: '${widget.initial.taxPercent}');
   late final _bank = TextEditingController(text: widget.initial.bankInfo);
   late final _receiptFooter = TextEditingController(text: widget.initial.receiptFooter);
@@ -45,7 +48,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
 
   @override
   void dispose() {
-    for (final c in [_name, _address, _phone, _tax, _bank, _receiptFooter, _invoiceFooter, _signature]) {
+    for (final c in [_name, _address, _phone, _email, _tax, _bank, _receiptFooter, _invoiceFooter, _signature]) {
       c.dispose();
     }
     super.dispose();
@@ -56,6 +59,7 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           storeName: _name.text.trim(),
           address: _address.text.trim(),
           phone: _phone.text.trim(),
+          email: _email.text.trim(),
           taxEnabled: _taxEnabled,
           taxPercent: double.tryParse(_tax.text.replaceAll(',', '.')) ?? 0,
           bankInfo: _bank.text.trim(),
@@ -85,6 +89,12 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
                 TextField(controller: _name, decoration: const InputDecoration(labelText: 'Nama toko')),
                 TextField(controller: _address, maxLines: 2, decoration: const InputDecoration(labelText: 'Alamat')),
                 TextField(controller: _phone, decoration: const InputDecoration(labelText: 'Telepon')),
+                TextField(
+                  controller: _email,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Email (tampil di invoice)'),
+                ),
+                const _LogoSection(),
                 Text('Pajak', style: Theme.of(context).textTheme.titleMedium),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -117,6 +127,82 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
                 FilledButton.icon(onPressed: busy ? null : _save, icon: const Icon(Icons.save), label: const Text('Simpan')),
               ],
             ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Logo distributor untuk invoice. Wajib PNG agar latar transparan tetap transparan di nota.
+class _LogoSection extends ConsumerWidget {
+  const _LogoSection();
+
+  Future<void> _pick(BuildContext context, WidgetRef ref) async {
+    final file = await FilePicker.pickFile(type: FileType.custom, allowedExtensions: const ['png']);
+    if (file == null) return;
+    final bytes = await file.xFile.readAsBytes();
+    final vm = ref.read(settingsViewModelProvider.notifier);
+    final ok = await vm.saveLogo(bytes);
+    if (!context.mounted) return;
+    if (!ok) {
+      showMessage(context, '${ref.read(settingsViewModelProvider).error}', isError: true);
+    } else if (!pngHasTransparency(bytes)) {
+      showMessage(context, 'Logo disimpan, tetapi PNG ini tidak punya latar transparan.');
+    } else {
+      showMessage(context, 'Logo disimpan');
+    }
+  }
+
+  Future<void> _remove(BuildContext context, WidgetRef ref) async {
+    final ok = await ref.read(settingsViewModelProvider.notifier).removeLogo();
+    if (!context.mounted) return;
+    showMessage(context, ok ? 'Logo dihapus' : '${ref.read(settingsViewModelProvider).error}', isError: !ok);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final logo = ref.watch(distributorLogoProvider).value;
+    final busy = ref.watch(settingsViewModelProvider).isLoading;
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      spacing: 16,
+      children: [
+        Container(
+          width: 96,
+          height: 64,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: scheme.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: logo == null
+              ? Text('Tanpa logo', style: Theme.of(context).textTheme.bodySmall)
+              : Padding(padding: const EdgeInsets.all(6), child: Image.memory(logo, fit: BoxFit.contain)),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: 4,
+            children: [
+              Text('Logo invoice', style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                'PNG transparan, maks ${maxLogoBytes ~/ 1024} KB. Tanpa logo, invoice hanya menampilkan nama distributor.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              Wrap(
+                spacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : () => _pick(context, ref),
+                    icon: const Icon(Icons.upload),
+                    label: Text(logo == null ? 'Unggah PNG' : 'Ganti'),
+                  ),
+                  if (logo != null)
+                    TextButton(onPressed: busy ? null : () => _remove(context, ref), child: const Text('Hapus')),
+                ],
+              ),
+            ],
           ),
         ),
       ],
