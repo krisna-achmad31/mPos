@@ -143,6 +143,7 @@ class _StockInFormState extends ConsumerState<_StockInForm> {
               width: 320,
               child: ProductPicker(
                 key: ValueKey(_pickerKey),
+                includeBundles: false,
                 onSelected: (p) => setState(() {
                   _selected = p;
                   _contents = 1;

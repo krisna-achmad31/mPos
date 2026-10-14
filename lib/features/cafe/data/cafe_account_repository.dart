@@ -8,6 +8,7 @@ import '../../auth/domain/entities/app_user.dart';
 import '../../sales/data/models/sales_models.dart';
 import '../../sales/domain/entities/cart_line.dart';
 import '../../sales/domain/entities/sales_order.dart';
+import '../../sales/domain/services/bundle_lines.dart';
 import '../domain/cafe.dart';
 import '../domain/cafe_rules.dart';
 import 'cafe_repository.dart';
@@ -124,7 +125,8 @@ class CafeStockReceipt {
   /// Baris yang masuk ke stok kopi: barang yang dihitung stoknya saja, digabung per produk.
   static List<CartLine> receivableLines(List<CartLine> lines) {
     final byProduct = <String, CartLine>{};
-    for (final l in lines.where((l) => l.trackStock && l.qty > 0)) {
+    // Bundling masuk sebagai produk-produk isinya.
+    for (final l in BundleLines.expand(lines).where((l) => l.trackStock && l.qty > 0)) {
       final prev = byProduct[l.productId];
       byProduct[l.productId] = prev == null
           ? l

@@ -4,6 +4,8 @@ import '../../../../core/error/app_exception.dart';
 import '../../../../core/viewmodel/action_view_model.dart';
 import '../../../auth/auth_providers.dart';
 import '../../domain/entities/product.dart';
+import '../../domain/services/bundle_rules.dart';
+import '../../domain/services/inventory_summary.dart';
 import '../../product_providers.dart';
 import '../../../reports/domain/demo_catalog.dart';
 import '../../../stock/domain/entities/stock_receipt.dart';
@@ -19,24 +21,147 @@ class ProductSearchViewModel extends Notifier<String> {
 
 final productSearchProvider = NotifierProvider<ProductSearchViewModel, String>(ProductSearchViewModel.new);
 
-/// Filter halaman Produk Owner: hanya yang perlu restock, dan/atau satu kategori.
-class ProductFilter {
-  const ProductFilter({this.restockOnly = false, this.category});
+/// Filter stok di halaman Produk Owner.
+enum StockFilter {
+  all('Semua stok'),
+  safe('Aman'),
+  low('Menipis'),
+  out('Habis'),
 
-  final bool restockOnly;
+  /// Menipis + habis (dari banner restock).
+  restock('Perlu restock');
+
+  const StockFilter(this.label);
+
+  final String label;
+
+  bool accepts(Product p) => switch (this) {
+        all => true,
+        safe => StockLevel.of(p) == StockLevel.safe,
+        low => StockLevel.of(p) == StockLevel.low,
+        out => StockLevel.of(p) == StockLevel.out,
+        restock => p.active && p.needsReorder,
+      };
+}
+
+enum ProductTypeFilter {
+  all('Semua jenis'),
+  product('Produk'),
+  bundle('Bundling');
+
+  const ProductTypeFilter(this.label);
+
+  final String label;
+}
+
+enum ActiveFilter {
+  all('Semua status'),
+  active('Aktif'),
+  inactive('Nonaktif');
+
+  const ActiveFilter(this.label);
+
+  final String label;
+}
+
+enum ProductSort {
+  restockFirst('Perlu restock dulu'),
+  name('Nama A–Z'),
+  stockAsc('Stok tersedikit'),
+  stockDesc('Stok terbanyak'),
+  valueDesc('Nilai barang tertinggi'),
+  priceDesc('Harga satuan tertinggi');
+
+  const ProductSort(this.label);
+
+  final String label;
+}
+
+/// Filter halaman Produk Owner: stok, kategori, jenis (produk / bundling), status, dan urutan.
+class ProductFilter {
+  const ProductFilter({
+    this.stock = StockFilter.all,
+    this.category,
+    this.type = ProductTypeFilter.all,
+    this.status = ActiveFilter.all,
+    this.sort = ProductSort.restockFirst,
+  });
+
+  final StockFilter stock;
   final String? category;
+  final ProductTypeFilter type;
+  final ActiveFilter status;
+  final ProductSort sort;
+
+  bool get restockOnly => stock == StockFilter.restock;
+
+  bool get isFiltered =>
+      stock != StockFilter.all || category != null || type != ProductTypeFilter.all || status != ActiveFilter.all;
+
+  ProductFilter copyWith({
+    StockFilter? stock,
+    String? Function()? category,
+    ProductTypeFilter? type,
+    ActiveFilter? status,
+    ProductSort? sort,
+  }) =>
+      ProductFilter(
+        stock: stock ?? this.stock,
+        category: category != null ? category() : this.category,
+        type: type ?? this.type,
+        status: status ?? this.status,
+        sort: sort ?? this.sort,
+      );
+
+  bool accepts(Product p) =>
+      stock.accepts(p) &&
+      (category == null || p.category == category) &&
+      switch (type) {
+        ProductTypeFilter.all => true,
+        ProductTypeFilter.product => !p.isBundle,
+        ProductTypeFilter.bundle => p.isBundle,
+      } &&
+      switch (status) {
+        ActiveFilter.all => true,
+        ActiveFilter.active => p.active,
+        ActiveFilter.inactive => !p.active,
+      };
 }
 
 class ProductFilterViewModel extends Notifier<ProductFilter> {
   @override
   ProductFilter build() => const ProductFilter();
 
-  void toggleRestock() => state = ProductFilter(restockOnly: !state.restockOnly, category: state.category);
+  void toggleRestock() =>
+      state = state.copyWith(stock: state.restockOnly ? StockFilter.all : StockFilter.restock);
 
-  void setCategory(String? category) => state = ProductFilter(restockOnly: state.restockOnly, category: category);
+  void setStock(StockFilter stock) => state = state.copyWith(stock: stock);
+
+  void setCategory(String? category) => state = state.copyWith(category: () => category);
+
+  void setType(ProductTypeFilter type) => state = state.copyWith(type: type);
+
+  void setStatus(ActiveFilter status) => state = state.copyWith(status: status);
+
+  void setSort(ProductSort sort) => state = state.copyWith(sort: sort);
+
+  void reset() => state = ProductFilter(sort: state.sort);
 }
 
 final productFilterProvider = NotifierProvider<ProductFilterViewModel, ProductFilter>(ProductFilterViewModel.new);
+
+/// Tampilan daftar produk Owner: kartu atau tabel (seperti Excel).
+enum ProductViewMode { cards, table }
+
+class ProductViewModeViewModel extends Notifier<ProductViewMode> {
+  @override
+  ProductViewMode build() => ProductViewMode.cards;
+
+  void set(ProductViewMode mode) => state = mode;
+}
+
+final productViewModeProvider =
+    NotifierProvider<ProductViewModeViewModel, ProductViewMode>(ProductViewModeViewModel.new);
 
 /// Kategori yang ada, urut abjad.
 final productCategoriesProvider = Provider<List<String>>((ref) {
@@ -44,23 +169,48 @@ final productCategoriesProvider = Provider<List<String>>((ref) {
   return products.map((p) => p.category).where((c) => c.isNotEmpty).toSet().toList()..sort();
 });
 
-/// Daftar produk setelah pencarian & filter; produk perlu restock selalu di atas.
+/// Modal per produk (HPP / harga beli). Kosong sampai data modal terbaca.
+final productUnitCostsProvider = Provider<Map<String, ProductCost>>(
+  (ref) => ref.watch(productCostsProvider).value ?? const {},
+);
+
+/// Daftar produk setelah pencarian, filter, dan urutan.
 final filteredProductsProvider = Provider<AsyncValue<List<Product>>>((ref) {
   final query = ref.watch(productSearchProvider);
   final filter = ref.watch(productFilterProvider);
+  final costs = ref.watch(productUnitCostsProvider);
   return ref.watch(productsProvider).whenData((products) {
-    final list = products
-        .where((p) =>
-            p.matches(query) &&
-            (!filter.restockOnly || (p.active && p.needsReorder)) &&
-            (filter.category == null || p.category == filter.category))
-        .toList();
+    final list = products.where((p) => p.matches(query) && filter.accepts(p)).toList();
+    int byName(Product a, Product b) => a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    int value(Product p) => InventorySummary.valueOf(p, costs[p.id]);
     list.sort((a, b) {
-      if (a.needsReorder != b.needsReorder) return a.needsReorder ? -1 : 1;
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      final c = switch (filter.sort) {
+        ProductSort.restockFirst => a.needsReorder == b.needsReorder ? 0 : (a.needsReorder ? -1 : 1),
+        ProductSort.name => 0,
+        ProductSort.stockAsc => a.stock.compareTo(b.stock),
+        ProductSort.stockDesc => b.stock.compareTo(a.stock),
+        ProductSort.valueDesc => value(b).compareTo(value(a)),
+        ProductSort.priceDesc => b.sellPrice.compareTo(a.sellPrice),
+      };
+      return c != 0 ? c : byName(a, b);
     });
     return list;
   });
+});
+
+/// Total stok & nilai barang seluruh produk (bukan hanya hasil filter).
+final inventorySummaryProvider = Provider<InventorySummary?>((ref) {
+  final products = ref.watch(productsProvider).value;
+  // Tunggu data modal agar nilai barang tidak sempat tampil Rp0.
+  if (products == null || !ref.watch(productCostsProvider).hasValue) return null;
+  return InventorySummary.of(products, ref.watch(productUnitCostsProvider));
+});
+
+/// Total stok & nilai untuk hasil filter saat ini.
+final filteredInventorySummaryProvider = Provider<InventorySummary?>((ref) {
+  final products = ref.watch(filteredProductsProvider).value;
+  if (products == null) return null;
+  return InventorySummary.of(products, ref.watch(productUnitCostsProvider));
 });
 
 final reorderProductsProvider = Provider<AsyncValue<List<Product>>>(
@@ -70,6 +220,13 @@ final reorderProductsProvider = Provider<AsyncValue<List<Product>>>(
 class ProductFormViewModel extends ActionViewModel {
   Future<bool> save(Product product, {required int buyPrice}) => run(() async {
         if (product.name.trim().isEmpty) throw const AppException('Nama produk wajib diisi.');
+        if (product.isBundle) {
+          if (product.sellPrice <= 0) throw const AppException('Harga bundling harus lebih dari 0.');
+          BundleRules.validate(product);
+          final user = ref.read(currentUserProvider);
+          await ref.read(productRepositoryProvider).saveProduct(product, buyPrice: buyPrice, userId: user.uid);
+          return;
+        }
         if (product.sellPrice <= 0) throw const AppException('Harga jual harus lebih dari 0.');
         if (product.wholesalePrice > 0 && product.wholesaleMinQty < 2) {
           throw const AppException('Qty minimal grosir minimal 2.');

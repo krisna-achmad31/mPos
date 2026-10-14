@@ -12,18 +12,22 @@ import '../../../../core/widgets/product_image_view.dart';
 import '../../domain/entities/product.dart';
 import '../../product_providers.dart';
 import '../viewmodels/product_view_models.dart';
+import 'bundle_form_view.dart';
 import 'product_list_view.dart' show categoryIcon;
 
 /// Tambah / ubah produk. [productId] null berarti produk baru.
 class ProductFormView extends ConsumerWidget {
-  const ProductFormView({super.key, this.productId});
+  const ProductFormView({super.key, this.productId, this.bundle = false});
 
   final String? productId;
+
+  /// Produk baru berupa bundling.
+  final bool bundle;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final id = productId;
-    if (id == null) return const _ProductForm(product: null, cost: null);
+    if (id == null) return bundle ? const BundleForm(bundle: null) : const _ProductForm(product: null, cost: null);
 
     final product = ref.watch(productProvider(id));
     final cost = ref.watch(productCostProvider(id));
@@ -33,6 +37,7 @@ class ProductFormView extends ConsumerWidget {
     if (product.value == null) {
       return Scaffold(appBar: AppBar(), body: const Center(child: Text('Produk tidak ditemukan')));
     }
+    if (product.value!.isBundle) return BundleForm(bundle: product.value);
     return _ProductForm(product: product.value, cost: cost.value);
   }
 }

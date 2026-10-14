@@ -22,6 +22,7 @@ abstract final class ProductModel {
         ],
         // Produk lama tidak punya field ini -> '' -> gambar default.
         imageBase64: readString(map['imageBase64']),
+        bundleItems: bundleItemsFromList(map['bundleItems']),
       );
 
   /// Tanpa field `stock`: stok hanya berubah lewat transaksi stok.
@@ -36,13 +37,36 @@ abstract final class ProductModel {
         'wholesalePrice': p.wholesalePrice,
         'wholesaleMinQty': p.wholesaleMinQty,
         'minStock': p.minStock,
-        'trackStock': p.trackStock,
+        // Bundling tidak punya stok sendiri (dihitung dari isinya).
+        'trackStock': p.isBundle ? false : p.trackStock,
         'active': p.active,
         'packs': [
           for (final pack in p.packs.where((x) => x.isValid))
             {'name': pack.name.trim(), 'contents': pack.contents, 'price': pack.price},
         ],
         'imageBase64': p.imageBase64,
+        'bundleItems': [for (final b in p.bundleItems) bundleItemToMap(b)],
+      };
+
+  static List<BundleItem> bundleItemsFromList(Object? list) => [
+        for (final m in readMapList(list))
+          BundleItem(
+            productId: readString(m['productId']),
+            name: readString(m['name']),
+            qty: readInt(m['qty']),
+            unit: readString(m['unit']).isEmpty ? 'pcs' : readString(m['unit']),
+            price: readInt(m['price']),
+            trackStock: readBool(m['trackStock'], fallback: true),
+          ),
+      ];
+
+  static Map<String, dynamic> bundleItemToMap(BundleItem b) => {
+        'productId': b.productId,
+        'name': b.name,
+        'qty': b.qty,
+        'unit': b.unit,
+        'price': b.price,
+        'trackStock': b.trackStock,
       };
 
   static ProductCost costFromMap(String productId, Map<String, dynamic>? map) => ProductCost(

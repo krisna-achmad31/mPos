@@ -11,6 +11,7 @@ import '../../domain/entities/cart_line.dart';
 import '../../domain/entities/invoice.dart';
 import '../../domain/entities/sales_order.dart';
 import '../../domain/repositories/sales_repository.dart';
+import '../../domain/services/bundle_lines.dart';
 import '../../domain/services/invoice_number.dart';
 import '../../domain/services/order_flow.dart';
 import '../../domain/services/sale_calculator.dart';
@@ -398,13 +399,8 @@ class FirestoreSalesRepository implements SalesRepository {
 
   // --------------------------------------------------------------- Helpers
 
-  Map<String, int> _qtyByProduct(List<CartLine> lines) {
-    final result = <String, int>{};
-    for (final l in lines.where((l) => l.trackStock)) {
-      result[l.productId] = (result[l.productId] ?? 0) + l.qty;
-    }
-    return result;
-  }
+  /// Bundling dijabarkan ke isinya: stok yang dipotong adalah stok produk isi.
+  Map<String, int> _qtyByProduct(List<CartLine> lines) => BundleLines.stockQtyByProduct(lines);
 
   /// Stok terbaru produk yang dihitung stoknya. Produk "tanpa stok" tidak dibaca.
   Future<Map<String, ({int qty, String name})>> _readStock(Transaction tx, List<CartLine> lines) async {
@@ -430,7 +426,7 @@ class FirestoreSalesRepository implements SalesRepository {
 
   Future<Map<String, int>> _readHpp(Transaction tx, List<CartLine> lines) async {
     final result = <String, int>{};
-    for (final id in lines.map((l) => l.productId).toSet()) {
+    for (final id in BundleLines.costProductIds(lines)) {
       final snap = await tx.get(_costs.doc(id));
       result[id] = readInt(snap.data()?['hpp']);
     }
@@ -482,10 +478,10 @@ class FirestoreSalesRepository implements SalesRepository {
       'createdAt': FieldValue.serverTimestamp(),
     });
     // HPP disalin saat nota terbit agar laba tidak berubah bila HPP produk berubah kemudian.
-    final totalCost = lines.fold<int>(0, (acc, l) => acc + (hpp[l.productId] ?? 0) * l.qty);
+    final totalCost = lines.fold<int>(0, (acc, l) => acc + BundleLines.unitCost(l, hpp) * l.qty);
     tx.set(_invoiceCosts.doc(ref.id), {
       'totalCost': totalCost,
-      'lines': {for (final l in lines) l.productId: hpp[l.productId] ?? 0},
+      'lines': {for (final l in lines) l.productId: BundleLines.unitCost(l, hpp)},
       'voided': false,
       'createdAt': FieldValue.serverTimestamp(),
     });

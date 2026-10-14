@@ -7,14 +7,18 @@ import '../utils/money.dart';
 
 /// Kolom pencarian produk aktif (nama, SKU, atau barcode).
 class ProductPicker extends ConsumerWidget {
-  const ProductPicker({super.key, required this.onSelected, this.label = 'Cari produk'});
+  const ProductPicker({super.key, required this.onSelected, this.label = 'Cari produk', this.includeBundles = true});
 
   final ValueChanged<Product> onSelected;
   final String label;
 
+  /// false untuk stok masuk & isi bundling: bundling tidak punya stok sendiri.
+  final bool includeBundles;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final products = ref.watch(activeProductsProvider).value ?? const <Product>[];
+    final all = ref.watch(activeProductsProvider).value ?? const <Product>[];
+    final products = includeBundles ? all : all.where((p) => !p.isBundle).toList();
     return Autocomplete<Product>(
       displayStringForOption: (p) => p.name,
       optionsBuilder: (value) =>
@@ -47,7 +51,7 @@ class ProductPicker extends ConsumerWidget {
                 for (final p in options)
                   ListTile(
                     dense: true,
-                    title: Text(p.name),
+                    title: Text(p.isBundle ? '${p.name} (bundling)' : p.name),
                     subtitle: Text('${formatRupiah(p.sellPrice)} · ${p.trackStock ? 'stok ${p.stock}' : 'tanpa stok'}'),
                     onTap: () => onSelect(p),
                   ),

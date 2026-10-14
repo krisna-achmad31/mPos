@@ -20,6 +20,38 @@ class ProductPack extends Equatable {
   List<Object?> get props => [name, contents, price];
 }
 
+/// Satu isi paket bundling: produk biasa + qty per paket.
+/// Nama, satuan, dan harga normal disalin saat bundling disimpan.
+class BundleItem extends Equatable {
+  const BundleItem({
+    required this.productId,
+    required this.name,
+    required this.qty,
+    this.unit = 'pcs',
+    this.price = 0,
+    this.trackStock = true,
+  });
+
+  final String productId;
+  final String name;
+
+  /// Jumlah satuan dasar produk ini dalam satu paket.
+  final int qty;
+  final String unit;
+
+  /// Harga jual satuan normal saat bundling disimpan (untuk "hemat" & pembagian nilai).
+  final int price;
+  final bool trackStock;
+
+  int get normalTotal => price * qty;
+
+  BundleItem copyWith({int? qty}) =>
+      BundleItem(productId: productId, name: name, qty: qty ?? this.qty, unit: unit, price: price, trackStock: trackStock);
+
+  @override
+  List<Object?> get props => [productId, name, qty, unit, price, trackStock];
+}
+
 /// Data produk yang boleh dilihat semua role (tanpa harga beli / HPP).
 class Product extends Equatable {
   const Product({
@@ -38,6 +70,7 @@ class Product extends Equatable {
     this.active = true,
     this.packs = const [],
     this.imageBase64 = '',
+    this.bundleItems = const [],
   });
 
   final String id;
@@ -66,6 +99,12 @@ class Product extends Equatable {
   /// Foto produk (JPEG, base64). Kosong untuk produk lama / tanpa foto: tampilan memakai gambar default.
   final String imageBase64;
 
+  /// Isi paket bundling. Kosong untuk produk biasa.
+  /// Bundling tidak punya stok sendiri: stoknya dihitung dari stok isinya (lihat BundleRules).
+  final List<BundleItem> bundleItems;
+
+  bool get isBundle => bundleItems.isNotEmpty;
+
   bool get hasImage => imageBase64.isNotEmpty;
 
   /// Kemasan valid, isi terbesar dulu.
@@ -73,7 +112,8 @@ class Product extends Equatable {
 
   bool get hasWholesale => wholesalePrice > 0 && wholesaleMinQty > 0;
 
-  bool get needsReorder => trackStock && stock <= minStock;
+  /// Bundling tidak di-restock sendiri; yang di-restock isinya.
+  bool get needsReorder => trackStock && !isBundle && stock <= minStock;
 
   bool get isOutOfStock => trackStock && stock <= 0;
 
@@ -99,6 +139,7 @@ class Product extends Equatable {
     bool? active,
     List<ProductPack>? packs,
     String? imageBase64,
+    List<BundleItem>? bundleItems,
   }) =>
       Product(
         id: id ?? this.id,
@@ -116,12 +157,13 @@ class Product extends Equatable {
         active: active ?? this.active,
         packs: packs ?? this.packs,
         imageBase64: imageBase64 ?? this.imageBase64,
+        bundleItems: bundleItems ?? this.bundleItems,
       );
 
   @override
   List<Object?> get props => [
         id, name, sku, barcode, category, unit, sellPrice, wholesalePrice, wholesaleMinQty,
-        minStock, trackStock, stock, active, packs, imageBase64,
+        minStock, trackStock, stock, active, packs, imageBase64, bundleItems,
       ];
 }
 

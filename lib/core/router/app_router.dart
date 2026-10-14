@@ -106,6 +106,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         page('/owner/invoices/:id', (s) => InvoiceView(invoiceId: s.pathParameters['id']!)),
         page('/owner/products', (_) => const ProductListView()),
         page('/owner/products/new', (_) => const ProductFormView()),
+        page('/owner/products/new-bundle', (_) => const ProductFormView(bundle: true)),
         page('/owner/products/:id', (s) => ProductFormView(productId: s.pathParameters['id'])),
         page('/owner/stock-in', (_) => const StockInView()),
         page('/owner/approvals', (_) => const ChangeRequestsView()),

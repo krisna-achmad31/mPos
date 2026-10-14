@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../../core/firebase/firestore_parsing.dart';
 import '../../../pricing/domain/services/pricing_service.dart';
+import '../../../products/data/models/product_model.dart';
 import '../../domain/entities/cart_line.dart';
 import '../../domain/entities/invoice.dart';
 import '../../domain/entities/sales_order.dart';
@@ -22,6 +23,7 @@ abstract final class SalesModels {
         'packs': [
           for (final p in l.packs) {'name': p.name, 'count': p.count, 'contents': p.contents, 'price': p.price},
         ],
+        if (l.isBundle) 'components': [for (final c in l.components) ProductModel.bundleItemToMap(c)],
       };
 
   static CartLine lineFromMap(Map<String, dynamic> m) => CartLine(
@@ -44,6 +46,7 @@ abstract final class SalesModels {
               price: readInt(p['price']),
             ),
         ],
+        components: ProductModel.bundleItemsFromList(m['components']),
       );
 
   static List<Map<String, dynamic>> linesToMap(List<CartLine> lines) => lines.map(lineToMap).toList();

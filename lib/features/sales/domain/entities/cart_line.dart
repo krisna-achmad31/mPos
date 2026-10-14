@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import '../../../pricing/domain/services/pricing_service.dart';
+import '../../../products/domain/entities/product.dart';
 
 /// Bagian baris yang dihitung per kemasan, mis. 1 karton isi 20 @Rp1.800.000.
 class PackUsage extends Equatable {
@@ -32,6 +33,7 @@ class CartLine extends Equatable {
     this.discountId,
     this.discountLabel = '',
     this.packs = const [],
+    this.components = const [],
   });
 
   final String productId;
@@ -44,6 +46,11 @@ class CartLine extends Equatable {
 
   /// Kemasan yang terpakai; sisanya (looseQty) dihitung dengan [unitPrice].
   final List<PackUsage> packs;
+
+  /// Isi per paket bila baris ini bundling: stok dipotong dari produk-produk ini (qty × [qty]).
+  final List<BundleItem> components;
+
+  bool get isBundle => components.isNotEmpty;
 
   /// Diisi saat nota dibuat (harga khusus / promo).
   final int discountAmount;
@@ -83,6 +90,7 @@ class CartLine extends Equatable {
         discountId: discountId ?? this.discountId,
         discountLabel: discountLabel ?? this.discountLabel,
         packs: packs ?? this.packs,
+        components: components,
       );
 
   CartLine withoutDiscount() => CartLine(
@@ -94,8 +102,9 @@ class CartLine extends Equatable {
         priceType: priceType,
         trackStock: trackStock,
         packs: packs,
+        components: components,
       );
 
   @override
-  List<Object?> get props => [productId, qty, unitPrice, priceType, discountAmount, discountId, packs];
+  List<Object?> get props => [productId, qty, unitPrice, priceType, discountAmount, discountId, packs, components];
 }
