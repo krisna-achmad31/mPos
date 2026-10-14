@@ -29,8 +29,9 @@ class BundleItem extends Equatable {
     required this.qty,
     this.unit = 'pcs',
     this.price = 0,
+    int? bundlePrice,
     this.trackStock = true,
-  });
+  }) : bundlePrice = bundlePrice ?? price;
 
   final String productId;
   final String name;
@@ -41,15 +42,27 @@ class BundleItem extends Equatable {
 
   /// Harga jual satuan normal saat bundling disimpan (untuk "hemat" & pembagian nilai).
   final int price;
+
+  /// Harga per satuan di dalam paket (diinput Owner). Harga paket = jumlah [bundleTotal] semua isi.
+  final int bundlePrice;
   final bool trackStock;
 
   int get normalTotal => price * qty;
 
-  BundleItem copyWith({int? qty}) =>
-      BundleItem(productId: productId, name: name, qty: qty ?? this.qty, unit: unit, price: price, trackStock: trackStock);
+  int get bundleTotal => bundlePrice * qty;
+
+  BundleItem copyWith({int? qty, int? bundlePrice}) => BundleItem(
+        productId: productId,
+        name: name,
+        qty: qty ?? this.qty,
+        unit: unit,
+        price: price,
+        bundlePrice: bundlePrice ?? this.bundlePrice,
+        trackStock: trackStock,
+      );
 
   @override
-  List<Object?> get props => [productId, name, qty, unit, price, trackStock];
+  List<Object?> get props => [productId, name, qty, unit, price, bundlePrice, trackStock];
 }
 
 /// Data produk yang boleh dilihat semua role (tanpa harga beli / HPP).

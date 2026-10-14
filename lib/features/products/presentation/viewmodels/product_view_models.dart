@@ -221,7 +221,6 @@ class ProductFormViewModel extends ActionViewModel {
   Future<bool> save(Product product, {required int buyPrice}) => run(() async {
         if (product.name.trim().isEmpty) throw const AppException('Nama produk wajib diisi.');
         if (product.isBundle) {
-          if (product.sellPrice <= 0) throw const AppException('Harga bundling harus lebih dari 0.');
           BundleRules.validate(product);
           final user = ref.read(currentUserProvider);
           await ref.read(productRepositoryProvider).saveProduct(product, buyPrice: buyPrice, userId: user.uid);

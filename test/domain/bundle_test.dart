@@ -11,7 +11,8 @@ import 'package:mpos/features/sales/domain/services/cart_rules.dart';
 import '../helpers.dart';
 
 void main() {
-  const kopi = BundleItem(productId: 'kopi', name: 'Kopi', qty: 2, price: 50000);
+  // Harga di paket per isi: kopi 40.000 (normal 50.000), susu 20.000 → paket 100.000.
+  const kopi = BundleItem(productId: 'kopi', name: 'Kopi', qty: 2, price: 50000, bundlePrice: 40000);
   const susu = BundleItem(productId: 'susu', name: 'Susu', qty: 1, price: 20000);
   const bundle = Product(id: 'b1', name: 'Paket', unit: 'paket', sellPrice: 100000, trackStock: false, bundleItems: [kopi, susu]);
 
@@ -41,6 +42,21 @@ void main() {
         bundle,
       ]);
       expect(resolved.last.trackStock, isFalse);
+    });
+
+    test('harga paket = jumlah harga per isi; isi lama tanpa harga paket memakai harga normal', () {
+      expect(BundleRules.bundlePrice(bundle.bundleItems), 100000);
+      expect(susu.bundlePrice, 20000);
+      expect(kopi.copyWith(bundlePrice: 45000).bundleTotal, 90000);
+      expect(
+        () => BundleRules.validate(bundle.copyWith(sellPrice: 90000)),
+        throwsA(isA<AppException>()),
+        reason: 'total harus sama dengan jumlah harga isi',
+      );
+      expect(
+        () => BundleRules.validate(bundle.copyWith(sellPrice: 60000, bundleItems: [kopi.copyWith(bundlePrice: 0), susu])),
+        throwsA(isA<AppException>()),
+      );
     });
 
     test('harga normal & validasi', () {
@@ -80,13 +96,13 @@ void main() {
       expect(back.gross, 200000);
     });
 
-    test('stok POS kopi menerima isi paket, nilai dibagi sebanding harga normal', () {
+    test('stok POS kopi menerima isi paket, nilai dibagi sebanding harga per isi di paket', () {
       final line = CartRules.addItem(const [], b).first;
       final received = CafeStockReceipt.receivableLines([line]);
       expect(received.map((l) => (l.productId, l.qty)), [('kopi', 2), ('susu', 1)]);
-      // 100.000 dibagi 100.000 : 20.000
+      // 100.000 dibagi 80.000 (2 × 40.000) : 20.000
       expect(received.fold(0, (s, l) => s + l.net), closeTo(100000, 2));
-      expect(received.first.net, closeTo(83333, 1));
+      expect(received.first.net, 80000);
     });
   });
 

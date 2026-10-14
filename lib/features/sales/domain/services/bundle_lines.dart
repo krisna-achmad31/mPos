@@ -30,7 +30,7 @@ abstract final class BundleLines {
       ? l.components.fold(0, (s, c) => s + (hpp[c.productId] ?? 0) * c.qty)
       : hpp[l.productId] ?? 0;
 
-  /// Bundling → baris per isi. Nilai bersih paket dibagi ke isinya sebanding harga normal,
+  /// Bundling → baris per isi. Nilai bersih paket dibagi ke isinya sebanding harga per isi di paket,
   /// agar HPP stok POS kopi pelanggan mencerminkan harga paket yang dibayar.
   static List<CartLine> expand(List<CartLine> lines) => [
         for (final l in lines)
@@ -38,7 +38,9 @@ abstract final class BundleLines {
       ];
 
   static List<CartLine> _split(CartLine l) {
-    final weights = [for (final c in l.components) (c.price > 0 ? c.price : 1) * c.qty];
+    final weights = [
+      for (final c in l.components) (c.bundlePrice > 0 ? c.bundlePrice : (c.price > 0 ? c.price : 1)) * c.qty,
+    ];
     final totalWeight = weights.fold(0, (s, w) => s + w);
     var allocated = 0;
     return [

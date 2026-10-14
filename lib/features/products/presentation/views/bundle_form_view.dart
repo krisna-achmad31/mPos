@@ -36,9 +36,6 @@ class _BundleFormState extends ConsumerState<BundleForm> {
   late final _name = TextEditingController(text: widget.bundle?.name);
   late final _sku = TextEditingController(text: widget.bundle?.sku);
   late final _barcode = TextEditingController(text: widget.bundle?.barcode);
-  late final _price = TextEditingController(
-    text: (widget.bundle?.sellPrice ?? 0) == 0 ? '' : '${widget.bundle!.sellPrice}',
-  );
   late List<BundleItem> _items = [...?widget.bundle?.bundleItems];
   late bool _active = widget.bundle?.active ?? true;
   late String _image = widget.bundle?.imageBase64 ?? '';
@@ -46,14 +43,8 @@ class _BundleFormState extends ConsumerState<BundleForm> {
   int _pickerKey = 0;
 
   @override
-  void initState() {
-    super.initState();
-    _price.addListener(() => setState(() {}));
-  }
-
-  @override
   void dispose() {
-    for (final c in [_name, _sku, _barcode, _price]) {
+    for (final c in [_name, _sku, _barcode]) {
       c.dispose();
     }
     super.dispose();
@@ -74,12 +65,14 @@ class _BundleFormState extends ConsumerState<BundleForm> {
     }
   }
 
-  BundleItem _itemFrom(Product p, int qty) => BundleItem(
+  /// [bundlePrice] null = harga normal produk (default saat baru ditambahkan).
+  BundleItem _itemFrom(Product p, int qty, {int? bundlePrice}) => BundleItem(
         productId: p.id,
         name: p.name,
         qty: qty,
         unit: p.unit,
         price: p.sellPrice,
+        bundlePrice: bundlePrice ?? p.sellPrice,
         trackStock: p.trackStock,
       );
 
@@ -103,10 +96,13 @@ class _BundleFormState extends ConsumerState<BundleForm> {
         }
       });
 
-  /// Nama & harga isi diperbarui dari produk terbaru saat disimpan.
+  void _setPrice(int index, int price) =>
+      setState(() => _items = [..._items]..[index] = _items[index].copyWith(bundlePrice: price));
+
+  /// Nama & harga normal isi diperbarui dari produk terbaru; harga di paket tetap yang diinput.
   List<BundleItem> _freshItems(Map<String, Product> products) => [
         for (final i in _items)
-          if (products[i.productId] case final p?) _itemFrom(p, i.qty) else i,
+          if (products[i.productId] case final p?) _itemFrom(p, i.qty, bundlePrice: i.bundlePrice) else i,
       ];
 
   Future<void> _save(Map<String, Product> products, Map<String, ProductCost> costs) async {
@@ -119,7 +115,7 @@ class _BundleFormState extends ConsumerState<BundleForm> {
       barcode: _barcode.text.trim(),
       category: base.category.isEmpty ? bundleCategory : base.category,
       unit: 'paket',
-      sellPrice: parseRupiah(_price.text),
+      sellPrice: BundleRules.bundlePrice(items),
       wholesalePrice: 0,
       wholesaleMinQty: 0,
       minStock: 0,
@@ -151,7 +147,7 @@ class _BundleFormState extends ConsumerState<BundleForm> {
     final items = _freshItems(products);
     final normal = BundleRules.normalPrice(items);
     final cost = BundleRules.cost(items, (id) => InventorySummary.unitCost(costs[id]));
-    final price = parseRupiah(_price.text);
+    final price = BundleRules.bundlePrice(items);
     final saving = normal - price;
     final preview = BundleRules.resolveStock([
       ...products.values,
@@ -195,7 +191,8 @@ class _BundleFormState extends ConsumerState<BundleForm> {
                     ]),
                     Text('Isi bundling', style: text.titleMedium),
                     Text(
-                      'Pilih produk dan jumlahnya per paket. Saat paket terjual, stok tiap produk isi ikut berkurang.',
+                      'Pilih produk, jumlah, dan harga per satuan di dalam paket. Harga paket = jumlah harga semua isi. '
+                      'Saat paket terjual, stok tiap produk isi ikut berkurang.',
                       style: text.bodySmall,
                     ),
                     ProductPicker(
@@ -211,61 +208,24 @@ class _BundleFormState extends ConsumerState<BundleForm> {
                         margin: EdgeInsets.zero,
                         child: Column(
                           children: [
-                            for (var i = 0; i < items.length; i++)
-                              ListTile(
-                                title: Text(items[i].name),
-                                subtitle: Text(
-                                  '${formatRupiah(items[i].price)} / ${items[i].unit}'
-                                  '${products[items[i].productId]?.trackStock ?? false ? ' · stok ${products[items[i].productId]!.stock}' : ''}'
-                                  '${products.containsKey(items[i].productId) ? '' : ' · produk tidak ditemukan'}',
-                                ),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      tooltip: 'Kurangi',
-                                      icon: const Icon(Icons.remove_circle_outline),
-                                      onPressed: () => _setQty(i, items[i].qty - 1),
-                                    ),
-                                    TextButton(
-                                      onPressed: () async {
-                                        final q = await askQuantity(context, current: items[i].qty, unit: items[i].unit);
-                                        if (q != null) _setQty(i, q);
-                                      },
-                                      child: Text('${items[i].qty} ${items[i].unit}'),
-                                    ),
-                                    IconButton(
-                                      tooltip: 'Tambah',
-                                      icon: const Icon(Icons.add_circle_outline),
-                                      onPressed: () => _setQty(i, items[i].qty + 1),
-                                    ),
-                                    IconButton(
-                                      tooltip: 'Hapus',
-                                      icon: Icon(Icons.delete_outline, color: scheme.error),
-                                      onPressed: () => _setQty(i, 0),
-                                    ),
-                                  ],
-                                ),
+                            for (var i = 0; i < items.length; i++) ...[
+                              if (i > 0) const Divider(height: 1),
+                              _ItemRow(
+                                key: ValueKey(items[i].productId),
+                                item: items[i],
+                                product: products[items[i].productId],
+                                onQty: (q) => _setQty(i, q),
+                                onPrice: (v) => _setPrice(i, v),
                               ),
+                            ],
                           ],
                         ),
                       ),
-                    Text('Harga', style: text.titleMedium),
-                    TextFormField(
-                      controller: _price,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: InputDecoration(
-                        labelText: 'Harga bundling per paket (Rp)',
-                        helperText: normal > 0 ? 'Harga normal isi: ${formatRupiah(normal)}' : null,
-                      ),
-                      validator: (v) => parseRupiah(v ?? '') <= 0 ? 'Isi harga bundling' : null,
-                    ),
                     if (items.isNotEmpty)
                       _Summary(
                         rows: [
                           ('Harga normal isi', formatRupiah(normal), null),
-                          ('Harga bundling', price > 0 ? formatRupiah(price) : '-', null),
+                          ('Harga bundling (jumlah harga isi)', price > 0 ? formatRupiah(price) : '-', null),
                           if (price > 0 && saving > 0)
                             ('Pelanggan hemat', '${formatRupiah(saving)} (${(saving * 100 / normal).round()}%)', scheme.primary),
                           if (price > 0 && saving < 0)
@@ -328,6 +288,120 @@ class _Summary extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Satu isi bundling: qty dan harga per satuan di paket.
+class _ItemRow extends StatefulWidget {
+  const _ItemRow({super.key, required this.item, required this.product, required this.onQty, required this.onPrice});
+
+  final BundleItem item;
+  final Product? product;
+  final ValueChanged<int> onQty;
+  final ValueChanged<int> onPrice;
+
+  @override
+  State<_ItemRow> createState() => _ItemRowState();
+}
+
+class _ItemRowState extends State<_ItemRow> {
+  late final _price = TextEditingController(text: '${widget.item.bundlePrice}');
+
+  @override
+  void dispose() {
+    _price.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final p = widget.product;
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final diff = item.price - item.bundlePrice;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: 8,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(item.name, style: text.titleSmall),
+                    Text(
+                      [
+                        'Normal ${formatRupiah(item.price)} / ${item.unit}',
+                        if (p != null && p.trackStock) 'stok ${p.stock}',
+                        if (p == null) 'produk tidak ditemukan',
+                      ].join(' · '),
+                      style: text.bodySmall?.copyWith(color: p == null ? scheme.error : null),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Kurangi',
+                icon: const Icon(Icons.remove_circle_outline),
+                onPressed: () => widget.onQty(item.qty - 1),
+              ),
+              TextButton(
+                onPressed: () async {
+                  final q = await askQuantity(context, current: item.qty, unit: item.unit);
+                  if (q != null) widget.onQty(q);
+                },
+                child: Text('${item.qty} ${item.unit}'),
+              ),
+              IconButton(
+                tooltip: 'Tambah',
+                icon: const Icon(Icons.add_circle_outline),
+                onPressed: () => widget.onQty(item.qty + 1),
+              ),
+              IconButton(
+                tooltip: 'Hapus',
+                icon: Icon(Icons.delete_outline, color: scheme.error),
+                onPressed: () => widget.onQty(0),
+              ),
+            ],
+          ),
+          Row(
+            spacing: 12,
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: _price,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: InputDecoration(
+                    isDense: true,
+                    labelText: 'Harga di paket per ${item.unit} (Rp)',
+                    helperText: diff > 0
+                        ? 'Hemat ${formatRupiah(diff)} / ${item.unit}'
+                        : diff < 0
+                            ? 'Lebih mahal ${formatRupiah(-diff)} dari normal'
+                            : 'Sama dengan harga normal',
+                  ),
+                  validator: (v) => parseRupiah(v ?? '') <= 0 ? 'Isi harga' : null,
+                  onChanged: (v) => widget.onPrice(parseRupiah(v)),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 8, bottom: 18),
+                child: Text(
+                  '${item.qty} × = ${formatRupiah(item.bundleTotal)}',
+                  style: text.titleSmall,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

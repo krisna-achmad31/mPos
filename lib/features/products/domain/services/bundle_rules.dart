@@ -30,6 +30,9 @@ abstract final class BundleRules {
   /// Total harga normal isi paket (harga satuan × qty).
   static int normalPrice(List<BundleItem> items) => items.fold(0, (s, i) => s + i.normalTotal);
 
+  /// Harga paket = jumlah harga per isi × qty yang diinput Owner.
+  static int bundlePrice(List<BundleItem> items) => items.fold(0, (s, i) => s + i.bundleTotal);
+
   /// Modal paket dari modal per isi.
   static int cost(List<BundleItem> items, int Function(String productId) unitCost) =>
       items.fold(0, (s, i) => s + unitCost(i.productId) * i.qty);
@@ -38,6 +41,12 @@ abstract final class BundleRules {
     final items = bundle.bundleItems;
     if (items.isEmpty) throw const AppException('Pilih minimal satu produk untuk isi bundling.');
     if (items.any((i) => i.qty <= 0)) throw const AppException('Qty tiap isi bundling harus lebih dari 0.');
+    for (final i in items) {
+      if (i.bundlePrice <= 0) throw AppException('Harga ${i.name} di bundling harus lebih dari 0.');
+    }
+    if (bundle.sellPrice != bundlePrice(items)) {
+      throw const AppException('Harga bundling harus sama dengan jumlah harga isinya.');
+    }
     if (items.fold(0, (s, i) => s + i.qty) < 2) {
       throw const AppException('Bundling minimal berisi 2 barang (mis. 2 produk, atau 1 produk qty 2).');
     }

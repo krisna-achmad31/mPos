@@ -56,6 +56,8 @@ abstract final class ProductModel {
             qty: readInt(m['qty']),
             unit: readString(m['unit']).isEmpty ? 'pcs' : readString(m['unit']),
             price: readInt(m['price']),
+            // Bundling lama belum punya harga per isi: pakai harga normal.
+            bundlePrice: m['bundlePrice'] == null ? null : readInt(m['bundlePrice']),
             trackStock: readBool(m['trackStock'], fallback: true),
           ),
       ];
@@ -66,6 +68,7 @@ abstract final class ProductModel {
         'qty': b.qty,
         'unit': b.unit,
         'price': b.price,
+        'bundlePrice': b.bundlePrice,
         'trackStock': b.trackStock,
       };
 
