@@ -6,7 +6,7 @@ enum PriceType {
   retail('Satuan'),
   wholesale('Grosir'),
 
-  /// Sebagian / seluruh qty dihitung per kemasan (karton, ball, pouch).
+  /// Sebagian / seluruh qty dihitung per kemasan (karton, bal, sak).
   pack('Kemasan'),
   manual('Manual');
 

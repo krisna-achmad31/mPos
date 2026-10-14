@@ -102,7 +102,7 @@ abstract final class CartRules {
     ];
   }
 
-  /// Harga otomatis: pecah ke kemasan (karton/ball/pouch), sisanya satuan / grosir.
+  /// Harga otomatis: pecah ke kemasan (karton/bal/sak), sisanya satuan / grosir.
   static CartLine _priced(CartLine line, Product product, int qty) {
     final price = PricingService.priceLine(product, qty);
     return line.copyWith(qty: qty, unitPrice: price.unitPrice, priceType: price.type, packs: price.packs);

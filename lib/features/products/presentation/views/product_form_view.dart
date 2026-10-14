@@ -35,7 +35,10 @@ class ProductFormView extends ConsumerWidget {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (product.value == null) {
-      return Scaffold(appBar: AppBar(), body: const Center(child: Text('Produk tidak ditemukan')));
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(child: Text('Produk tidak ditemukan')),
+      );
     }
     if (product.value!.isBundle) return BundleForm(bundle: product.value);
     return _ProductForm(product: product.value, cost: cost.value);
@@ -59,17 +62,16 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   late final _barcode = TextEditingController(text: widget.product?.barcode);
   late String? _category = (widget.product?.category ?? '').isEmpty ? null : widget.product!.category;
 
-  // Harga per kemasan: karton / ball / pouch (isi dalam satuan dasar + harga per kemasan).
+  // Harga per kemasan: karton / bal / sak / pouch (isi dalam satuan dasar + harga per kemasan).
   late final _packContents = {
-    for (final name in ProductPack.presetNames)
-      name: TextEditingController(text: _num(_existingPack(name)?.contents)),
+    for (final name in ProductPack.presetNames) name: TextEditingController(text: _num(_existingPack(name)?.contents)),
   };
   late final _packPrice = {
     for (final name in ProductPack.presetNames) name: TextEditingController(text: _num(_existingPack(name)?.price)),
   };
 
   ProductPack? _existingPack(String name) =>
-      widget.product?.packs.where((p) => p.name.toLowerCase() == name).firstOrNull;
+      widget.product?.packs.where((p) => ProductPack.canonicalName(p.name) == name).firstOrNull;
   late final _unit = TextEditingController(text: widget.product?.unit ?? 'pcs');
   late final _buyPrice = TextEditingController(text: _num(widget.cost?.buyPrice));
   late final _sellPrice = TextEditingController(text: _num(widget.product?.sellPrice));
@@ -99,11 +101,36 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
 
   static String _num(int? v) => v == null || v == 0 ? '' : '$v';
 
+  String get _unitLabel => _unit.text.trim().isEmpty ? 'pcs' : _unit.text.trim();
+
+  /// Pouch hanya tampil untuk produk lama yang sudah memakainya.
+  late final _showPouch = _existingPack('pouch') != null;
+
+  @override
+  void initState() {
+    super.initState();
+    // Label "1 karton = 24 pcs" ikut berubah saat satuan / isi diketik.
+    for (final c in [_unit, ..._packContents.values]) {
+      c.addListener(_refresh);
+    }
+  }
+
+  void _refresh() => setState(() {});
+
   @override
   void dispose() {
     for (final c in [
-      _name, _sku, _barcode, _unit, _buyPrice, _sellPrice, _wholesalePrice, _wholesaleMin, _minStock,
-      ..._packContents.values, ..._packPrice.values,
+      _name,
+      _sku,
+      _barcode,
+      _unit,
+      _buyPrice,
+      _sellPrice,
+      _wholesalePrice,
+      _wholesaleMin,
+      _minStock,
+      ..._packContents.values,
+      ..._packPrice.values,
     ]) {
       c.dispose();
     }
@@ -187,39 +214,94 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                       onRemove: () => setState(() => _image = ''),
                     ),
                     field(_name, 'Nama produk', required: true),
-                    Row(spacing: 12, children: [
-                      Expanded(child: field(_sku, 'SKU')),
-                      Expanded(child: field(_barcode, 'Barcode')),
-                    ]),
-                    Row(spacing: 12, children: [
-                      Expanded(child: _CategoryField(value: _category, onChanged: (v) => setState(() => _category = v))),
-                      Expanded(child: field(_unit, 'Satuan dasar', helper: 'mis. pcs, botol, kotak')),
-                    ]),
+                    Row(
+                      spacing: 12,
+                      children: [
+                        Expanded(child: field(_sku, 'SKU')),
+                        Expanded(child: field(_barcode, 'Barcode')),
+                      ],
+                    ),
+                    Row(
+                      spacing: 12,
+                      children: [
+                        Expanded(
+                          child: _CategoryField(value: _category, onChanged: (v) => setState(() => _category = v)),
+                        ),
+                        Expanded(
+                          child: field(
+                            _unit,
+                            'Satuan dasar (jual eceran)',
+                            helper: 'Satuan terkecil, mis. pcs atau kg',
+                          ),
+                        ),
+                      ],
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        for (final u in Product.unitPresets)
+                          ChoiceChip(
+                            label: Text(u),
+                            selected: _unit.text.trim() == u,
+                            onSelected: (_) => setState(() => _unit.text = u),
+                          ),
+                      ],
+                    ),
                     Text('Harga', style: Theme.of(context).textTheme.titleMedium),
-                    Row(spacing: 12, children: [
-                      Expanded(child: field(_buyPrice, 'Harga beli (Rp)', number: true)),
-                      Expanded(child: field(_sellPrice, 'Harga jual satuan (Rp)', number: true, required: true)),
-                    ]),
-                    Row(spacing: 12, children: [
-                      Expanded(child: field(_wholesalePrice, 'Harga grosir (Rp)', number: true, helper: 'Kosongkan bila tidak ada')),
-                      Expanded(child: field(_wholesaleMin, 'Qty minimal grosir', number: true)),
-                    ]),
-                    Text('Harga per kemasan', style: Theme.of(context).textTheme.titleMedium),
+                    Row(
+                      spacing: 12,
+                      children: [
+                        Expanded(child: field(_buyPrice, 'Harga beli (Rp)', number: true)),
+                        Expanded(child: field(_sellPrice, 'Harga jual satuan (Rp)', number: true, required: true)),
+                      ],
+                    ),
+                    Row(
+                      spacing: 12,
+                      children: [
+                        Expanded(
+                          child: field(
+                            _wholesalePrice,
+                            'Harga grosir (Rp)',
+                            number: true,
+                            helper: 'Kosongkan bila tidak ada',
+                          ),
+                        ),
+                        Expanded(child: field(_wholesaleMin, 'Qty minimal grosir', number: true)),
+                      ],
+                    ),
+                    Text('Dijual per kemasan', style: Theme.of(context).textTheme.titleMedium),
                     Text(
-                      'Isi = jumlah satuan dasar per kemasan. Pembelian otomatis dipecah ke kemasan terbesar dulu, '
-                      'mis. beli 25 dengan karton isi 20 → 1 karton + 5 satuan. Kosongkan yang tidak dipakai.',
+                      'Selain per $_unitLabel, produk bisa dijual per karton / bal / sak. Isi = berapa $_unitLabel dalam '
+                      'satu kemasan. Pembelian otomatis dipecah ke kemasan terbesar dulu, mis. beli 25 dengan karton '
+                      'isi 20 → 1 karton + 5 $_unitLabel. Kosongkan yang tidak dipakai.',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     for (final name in ProductPack.presetNames)
-                      Row(spacing: 12, children: [
-                        SizedBox(
-                          width: 72,
-                          child: Text(name[0].toUpperCase() + name.substring(1),
-                              style: Theme.of(context).textTheme.titleSmall),
+                      if (name != 'pouch' || _showPouch)
+                        Row(
+                          spacing: 12,
+                          children: [
+                            SizedBox(
+                              width: 72,
+                              child: Text(
+                                name[0].toUpperCase() + name.substring(1),
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                            ),
+                            Expanded(
+                              child: field(
+                                _packContents[name]!,
+                                'Isi per $name ($_unitLabel)',
+                                number: true,
+                                helper: parseRupiah(_packContents[name]!.text) > 1
+                                    ? '1 $name = ${parseRupiah(_packContents[name]!.text)} $_unitLabel'
+                                    : null,
+                              ),
+                            ),
+                            Expanded(child: field(_packPrice[name]!, 'Harga per $name (Rp)', number: true)),
+                          ],
                         ),
-                        Expanded(child: field(_packContents[name]!, 'Isi per $name', number: true)),
-                        Expanded(child: field(_packPrice[name]!, 'Harga per $name (Rp)', number: true)),
-                      ]),
                     Text('Stok', style: Theme.of(context).textTheme.titleMedium),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
@@ -229,11 +311,17 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                       onChanged: (v) => setState(() => _trackStock = v),
                     ),
                     if (_trackStock)
-                      field(_minStock, 'Stok minimum (order ulang)', number: true,
-                          helper: 'Peringatan muncul saat stok sama atau di bawah angka ini'),
+                      field(
+                        _minStock,
+                        'Stok minimum (order ulang)',
+                        number: true,
+                        helper: 'Peringatan muncul saat stok sama atau di bawah angka ini',
+                      ),
                     if (widget.product != null)
-                      Text('Stok saat ini: ${widget.product!.stock} ${widget.product!.unit}. '
-                          'Stok berubah lewat stok masuk, penjualan, atau stock opname.'),
+                      Text(
+                        'Stok saat ini: ${widget.product!.stock} ${widget.product!.unit}. '
+                        'Stok berubah lewat stok masuk, penjualan, atau stock opname.',
+                      ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
                       title: const Text('Aktif dijual'),
@@ -342,7 +430,7 @@ class ProductImageField extends StatelessWidget {
                 busy
                     ? 'Memproses foto…'
                     : 'JPG / PNG / WebP. Otomatis diperkecil ke $productImageMaxSide px. '
-                        'Tanpa foto, produk memakai gambar default.',
+                          'Tanpa foto, produk memakai gambar default.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               Wrap(

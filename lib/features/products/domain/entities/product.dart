@@ -1,10 +1,17 @@
 import 'package:equatable/equatable.dart';
 
-/// Kemasan jual selain satuan dasar, mis. karton isi 20 / ball isi 10 / pouch isi 6.
+/// Kemasan jual selain satuan dasar, mis. karton isi 20 / bal isi 10 / sak isi 25 (kg).
 class ProductPack extends Equatable {
   const ProductPack({required this.name, required this.contents, required this.price});
 
-  static const presetNames = ['karton', 'ball', 'pouch'];
+  /// Pouch dipertahankan untuk produk lama.
+  static const presetNames = ['karton', 'bal', 'sak', 'pouch'];
+
+  /// Nama kemasan baku; "ball" (data lama) = "bal".
+  static String canonicalName(String name) {
+    final n = name.trim().toLowerCase();
+    return n == 'ball' ? 'bal' : n;
+  }
 
   final String name;
 
@@ -15,6 +22,9 @@ class ProductPack extends Equatable {
   final int price;
 
   bool get isValid => name.trim().isNotEmpty && contents > 1 && price > 0;
+
+  /// Mis. "1 karton = 24 botol".
+  String label(String unit) => '1 ${canonicalName(name)} = $contents $unit';
 
   @override
   List<Object?> get props => [name, contents, price];
@@ -106,7 +116,7 @@ class Product extends Equatable {
   final int stock;
   final bool active;
 
-  /// Harga per kemasan (karton/ball/pouch). Pembelian otomatis dipecah ke kemasan terbesar dulu.
+  /// Harga per kemasan (karton/bal/sak/pouch). Pembelian otomatis dipecah ke kemasan terbesar dulu.
   final List<ProductPack> packs;
 
   /// Foto produk (JPEG, base64). Kosong untuk produk lama / tanpa foto: tampilan memakai gambar default.
@@ -119,6 +129,12 @@ class Product extends Equatable {
   bool get isBundle => bundleItems.isNotEmpty;
 
   bool get hasImage => imageBase64.isNotEmpty;
+
+  /// Satuan dasar yang umum; Owner tetap bisa mengetik sendiri.
+  static const unitPresets = ['pcs', 'kg', 'botol', 'pack', 'liter', 'karung'];
+
+  /// Isi tiap kemasan, mis. "1 karton = 24 pcs · 1 bal = 10 pcs". Kosong bila hanya dijual satuan.
+  String get packsLabel => packsBySize.map((p) => p.label(unit)).join(' · ');
 
   /// Kemasan valid, isi terbesar dulu.
   List<ProductPack> get packsBySize => packs.where((p) => p.isValid).toList()..sort((a, b) => b.contents.compareTo(a.contents));

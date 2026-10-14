@@ -8,7 +8,7 @@ import '../../sales/domain/services/sale_calculator.dart';
 /// Edit satu nota demo: jam transaksi dan qty per baris. Murni agar bisa dites.
 abstract final class DemoInvoiceEditor {
   /// [qtyByLine] sejajar dengan `invoice.lines`; qty 0 menghapus baris.
-  /// [products] dipakai untuk menghitung ulang harga per kemasan (karton/ball/pouch) saat qty berubah.
+  /// [products] dipakai untuk menghitung ulang harga per kemasan (karton/bal/sak) saat qty berubah.
   static Invoice edit(
     Invoice invoice, {
     required DateTime time,

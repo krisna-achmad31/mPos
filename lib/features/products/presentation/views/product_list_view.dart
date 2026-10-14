@@ -467,7 +467,7 @@ class _ProductTable extends ConsumerWidget {
                         cells: [
                           DataCell(
                             ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 280),
+                              constraints: const BoxConstraints(maxWidth: 340),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 spacing: 6,
@@ -478,10 +478,8 @@ class _ProductTable extends ConsumerWidget {
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          p.name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                        _NameWithPacks(
+                                          product: p,
                                           style: p.active ? null : TextStyle(color: scheme.outline),
                                         ),
                                         if (p.isBundle)
@@ -539,6 +537,47 @@ class _ProductTable extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Nama produk + keterangan isi kemasan di sebelahnya, mis. "1 karton = 24 botol".
+class _NameWithPacks extends StatelessWidget {
+  const _NameWithPacks({required this.product, this.style});
+
+  final Product product;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = product.packsLabel;
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 8,
+      children: [
+        Flexible(
+          child: Text(product.name, style: style, maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+        if (label.isNotEmpty)
+          Flexible(
+            child: Tooltip(
+              message: label,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(8)),
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelSmall?.copyWith(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -715,7 +754,7 @@ class _ProductCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     spacing: 4,
                     children: [
-                      Text(p.name, style: text.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      _NameWithPacks(product: p, style: text.titleMedium),
                       Text(
                         [
                           if (p.isBundle) 'BUNDLING',
@@ -723,7 +762,7 @@ class _ProductCard extends StatelessWidget {
                           if (p.isBundle) 'isi: ${BundleRules.contentsLabel(p.bundleItems)}',
                           if (p.hasWholesale) 'grosir ${formatRupiah(p.wholesalePrice)} (≥${p.wholesaleMinQty})',
                           for (final pack in p.packsBySize)
-                            '${pack.name} ${pack.contents}: ${formatRupiah(pack.price)}',
+                            '${ProductPack.canonicalName(pack.name)} ${formatRupiah(pack.price)}',
                           if (p.category.isNotEmpty && !p.isBundle) p.category,
                           if (!p.active) 'nonaktif',
                         ].join(' · '),
@@ -860,7 +899,7 @@ class _SampleProductsButton extends ConsumerWidget {
                 context,
                 title: 'Tambah / perbarui produk contoh?',
                 message:
-                    '${DemoCatalog.products.length} produk distributor cafe dalam 8 kategori, dengan harga per karton / ball / pouch. '
+                    '${DemoCatalog.products.length} produk distributor cafe dalam 8 kategori, dengan harga per karton / bal. '
                     'Produk contoh yang belum ada ditambahkan beserta stok awal (Stok Masuk). '
                     'Yang sudah ada hanya diperbarui kategori & kemasannya; harga tidak diubah.',
               );

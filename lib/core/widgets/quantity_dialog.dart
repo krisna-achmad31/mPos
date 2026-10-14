@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Ketik qty langsung (mis. 25) — sistem yang memecah ke karton / ball / pouch.
+/// Ketik qty langsung (mis. 25) — sistem yang memecah ke karton / bal / sak.
 Future<int?> askQuantity(BuildContext context, {required int current, required String unit, String? hint}) {
   final controller = TextEditingController(text: '$current');
   return showDialog<int>(
