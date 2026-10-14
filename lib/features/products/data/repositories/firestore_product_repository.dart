@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../core/firebase/collections.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
+import '../../domain/services/bundle_rules.dart';
 import '../models/product_model.dart';
 import '../../../../core/firebase/tenant_store.dart';
 
@@ -18,10 +19,10 @@ class FirestoreProductRepository implements ProductRepository {
 
   @override
   Stream<List<Product>> watchProducts({bool activeOnly = false}) {
-    Query<Map<String, dynamic>> query = _products;
-    if (activeOnly) query = query.where('active', isEqualTo: true);
-    return query.snapshots().map((snap) {
-      final list = snap.docs.map((d) => ProductModel.fromMap(d.id, d.data())).toList();
+    // Semua produk dibaca agar stok bundling bisa dihitung dari isinya; filter aktif di sini.
+    return _products.snapshots().map((snap) {
+      final all = BundleRules.resolveStock(snap.docs.map((d) => ProductModel.fromMap(d.id, d.data())).toList());
+      final list = activeOnly ? all.where((p) => p.active).toList() : all;
       list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       return list;
     });

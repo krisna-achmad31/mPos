@@ -12,6 +12,7 @@ import '../../../auth/auth_providers.dart';
 import '../../../pricing/domain/services/pricing_service.dart';
 import '../../../pricing/pricing_providers.dart';
 import '../../../products/domain/entities/product.dart';
+import '../../../products/domain/services/bundle_rules.dart';
 import '../../../products/presentation/viewmodels/product_view_models.dart';
 import '../../../products/presentation/views/product_list_view.dart' show categoryIcon;
 import '../../../products/product_providers.dart';
@@ -93,6 +94,8 @@ class _ProductCard extends ConsumerWidget {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final out = product.isOutOfStock;
+    final normal = BundleRules.normalPrice(product.bundleItems);
+    final saving = product.isBundle ? normal - product.sellPrice : 0;
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -101,10 +104,31 @@ class _ProductCard extends ConsumerWidget {
         children: [
           SizedBox(
             height: 130,
-            child: ProductImageView(
-              imageBase64: product.imageBase64,
-              fallbackIcon: categoryIcon(product.category),
-              borderRadius: 0,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ProductImageView(
+                  imageBase64: product.imageBase64,
+                  fallbackIcon: product.isBundle ? Icons.redeem_outlined : categoryIcon(product.category),
+                  borderRadius: 0,
+                ),
+                if (product.isBundle)
+                  Positioned(
+                    left: 8,
+                    top: 8,
+                    child: Chip(
+                      avatar: Icon(Icons.redeem, size: 16, color: scheme.onPrimary),
+                      label: Text(
+                        saving > 0 ? 'Bundling · hemat ${formatRupiah(saving)}' : 'Bundling',
+                        style: text.labelSmall?.copyWith(color: scheme.onPrimary, fontWeight: FontWeight.w700),
+                      ),
+                      backgroundColor: scheme.primary,
+                      side: BorderSide.none,
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+              ],
             ),
           ),
           Expanded(
@@ -114,8 +138,18 @@ class _ProductCard extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.titleSmall),
+                  if (product.isBundle)
+                    Text(
+                      'Isi: ${BundleRules.contentsLabel(product.bundleItems)}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.bodySmall,
+                    ),
                   const SizedBox(height: 4),
-                  if (promoPrice != null) ...[
+                  if (product.isBundle && promoPrice == null && saving > 0) ...[
+                    Text(formatRupiah(normal), style: text.bodySmall?.copyWith(decoration: TextDecoration.lineThrough)),
+                    Text(formatRupiah(product.sellPrice), style: text.titleMedium?.copyWith(color: scheme.primary)),
+                  ] else if (promoPrice != null) ...[
                     Text(
                       formatRupiah(product.sellPrice),
                       style: text.bodySmall?.copyWith(decoration: TextDecoration.lineThrough),

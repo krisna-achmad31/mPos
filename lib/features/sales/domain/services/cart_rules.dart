@@ -122,5 +122,6 @@ abstract final class CartRules {
         unitPrice: price,
         priceType: type,
         trackStock: p.trackStock,
+        components: p.bundleItems,
       );
 }

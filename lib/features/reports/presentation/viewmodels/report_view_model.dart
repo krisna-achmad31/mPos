@@ -171,7 +171,10 @@ class DemoDataViewModel extends ActionViewModel {
   }) => run(() async {
     final catalog = ref.read(demoCatalogProvider);
     final cafe = catalog.profile == BuyerProfile.cafe;
-    final products = useDemoCatalog ? catalog.products : await readReady(activeProductsProvider.future);
+    // Bundling dilewati: data demo tidak memotong stok isinya.
+    final products = useDemoCatalog
+        ? catalog.products
+        : (await readReady(activeProductsProvider.future)).where((p) => !p.isBundle).toList();
     final customers = useDemoCatalog || cafe
         ? catalog.customers
         : (await readReady(customersProvider.future)).map((c) => c.displayName).toList();

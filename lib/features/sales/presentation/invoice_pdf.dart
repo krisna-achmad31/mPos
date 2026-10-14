@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../core/utils/money.dart';
 import '../../../core/utils/terbilang.dart';
 import '../../auth/domain/entities/app_user.dart';
+import '../../products/domain/services/bundle_rules.dart';
 import '../../settings/domain/store_settings.dart';
 import '../domain/entities/invoice.dart';
 
@@ -63,7 +64,8 @@ List<_Row> _rows(Invoice invoice) => [
       for (final l in invoice.lines) ...() {
         final parts = <_Row>[
           for (final p in l.packs) _Row(l.name, p.count, p.name, p.price, 0, p.total),
-          if (l.looseQty > 0 || l.packs.isEmpty) _Row(l.name, l.looseQty, l.unit, l.unitPrice, 0, l.looseQty * l.unitPrice),
+          if (l.looseQty > 0 || l.packs.isEmpty)
+            _Row(l.isBundle ? '${l.name} (${BundleRules.contentsLabel(l.components)})' : l.name, l.looseQty, l.unit, l.unitPrice, 0, l.looseQty * l.unitPrice),
         ];
         // Diskon baris dicatat di baris terakhir supaya kolom Jumlah = nilai bersih.
         final last = parts.removeLast();
