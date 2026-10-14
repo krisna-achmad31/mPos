@@ -448,6 +448,7 @@ class _ProductTable extends ConsumerWidget {
                   showCheckboxColumn: false,
                   columns: const [
                     DataColumn(label: Text('Nama')),
+                    DataColumn(label: Text('Keterangan')),
                     DataColumn(label: Text('Harga modal'), numeric: true),
                     DataColumn(label: Text('Harga satuan'), numeric: true),
                     DataColumn(label: Text('Harga karton'), numeric: true),
@@ -467,7 +468,7 @@ class _ProductTable extends ConsumerWidget {
                         cells: [
                           DataCell(
                             ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 340),
+                              constraints: const BoxConstraints(maxWidth: 260),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 spacing: 6,
@@ -478,17 +479,12 @@ class _ProductTable extends ConsumerWidget {
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        _NameWithPacks(
-                                          product: p,
+                                        Text(
+                                          p.name,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                           style: p.active ? null : TextStyle(color: scheme.outline),
                                         ),
-                                        if (p.isBundle)
-                                          Text(
-                                            BundleRules.contentsLabel(p.bundleItems),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: text.bodySmall,
-                                          ),
                                       ],
                                     ),
                                   ),
@@ -496,6 +492,7 @@ class _ProductTable extends ConsumerWidget {
                               ),
                             ),
                           ),
+                          DataCell(_Remarks(product: p)),
                           costMoney(() => unitCost(p)),
                           money(p.sellPrice),
                           money(_carton(p)?.price ?? 0),
@@ -522,6 +519,7 @@ class _ProductTable extends ConsumerWidget {
                           const DataCell(Text('')),
                           const DataCell(Text('')),
                           const DataCell(Text('')),
+                          const DataCell(Text('')),
                           DataCell(Text(formatNumber(summary.totalStock), style: bold)),
                           costsLoading
                               ? const DataCell(_LoadingValue())
@@ -541,7 +539,7 @@ class _ProductTable extends ConsumerWidget {
   }
 }
 
-/// Nama produk + keterangan isi kemasan di sebelahnya, mis. "1 karton = 24 botol".
+/// Nama produk + keterangan isi kemasan di sebelahnya (tampilan kartu).
 class _NameWithPacks extends StatelessWidget {
   const _NameWithPacks({required this.product, this.style});
 
@@ -551,7 +549,6 @@ class _NameWithPacks extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final label = product.packsLabel;
-    final scheme = Theme.of(context).colorScheme;
     return Row(
       mainAxisSize: MainAxisSize.min,
       spacing: 8,
@@ -559,25 +556,66 @@ class _NameWithPacks extends StatelessWidget {
         Flexible(
           child: Text(product.name, style: style, maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
-        if (label.isNotEmpty)
-          Flexible(
-            child: Tooltip(
-              message: label,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(8)),
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelSmall?.copyWith(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-          ),
+        if (label.isNotEmpty) Flexible(child: _Badge(label)),
       ],
+    );
+  }
+}
+
+/// Kolom "Keterangan" di tabel: isi tiap kemasan, atau isi paket untuk bundling.
+class _Remarks extends StatelessWidget {
+  const _Remarks({required this.product});
+
+  final Product product;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = product;
+    if (p.isBundle) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 280),
+        child: Text(
+          'Isi: ${BundleRules.contentsLabel(p.bundleItems)}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      );
+    }
+    final packs = p.packsBySize;
+    if (packs.isEmpty) {
+      return Text('Satuan (${p.unit})', style: Theme.of(context).textTheme.bodySmall);
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      spacing: 6,
+      children: [for (final pack in packs) _Badge(pack.label(p.unit))],
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  const _Badge(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: label,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(8)),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(
+            context,
+          ).textTheme.labelSmall?.copyWith(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600),
+        ),
+      ),
     );
   }
 }
