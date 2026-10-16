@@ -50,6 +50,8 @@ dependencies:
   image: ^4.12.0
   archive: ^4.5.1
   print_bluetooth_thermal: ^1.2.5
+  # Menyimpan pilihan tampilan (Terang / Gelap / Ikuti sistem) di perangkat.
+  shared_preferences: ^2.5.3
 
 dev_dependencies:
   flutter_test:

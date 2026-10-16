@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../core/widgets/app_layout.dart';
 import '../../domain/entities/stock_receipt.dart';
 
 class ReceiptEditResult {
@@ -56,20 +57,29 @@ class _ReceiptEditDialogState extends State<ReceiptEditDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
+
     return AlertDialog(
-      title: Text(widget.requireReason ? 'Ajukan perubahan' : 'Ubah stok masuk'),
+      title: Text(widget.requireReason ? 'Ajukan koreksi' : 'Ubah stok masuk'),
       content: SizedBox(
         width: 420,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            spacing: 12,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: AppSpacing.md,
             children: [
               for (var i = 0; i < widget.receipt.items.length; i++)
                 Row(
-                  spacing: 12,
+                  spacing: AppSpacing.md,
                   children: [
-                    Expanded(child: Text(widget.receipt.items[i].productName)),
+                    Expanded(
+                      child: Text(
+                        widget.receipt.items[i].productName,
+                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
                     SizedBox(
                       width: 96,
                       child: TextField(
@@ -85,10 +95,20 @@ class _ReceiptEditDialogState extends State<ReceiptEditDialog> {
                 TextField(
                   controller: _reason,
                   maxLines: 2,
-                  decoration: InputDecoration(labelText: 'Alasan perubahan', errorText: _error),
+                  decoration: InputDecoration(labelText: 'Alasan koreksi', errorText: _error),
                 ),
               if (widget.requireReason)
-                const Text('Stok tidak berubah sampai Owner menyetujui pengajuan ini.'),
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: tokens.warningTint,
+                    borderRadius: BorderRadius.circular(AppRadius.control),
+                  ),
+                  child: Text(
+                    'Stok tidak berubah sampai Owner menyetujui pengajuan ini.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: tokens.warning),
+                  ),
+                ),
             ],
           ),
         ),

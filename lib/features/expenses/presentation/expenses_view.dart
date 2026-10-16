@@ -4,47 +4,100 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/dates.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/widgets/app_layout.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../sales/presentation/viewmodels/report_view_model.dart';
 import '../../sales/presentation/widgets/month_switcher.dart';
 import '../domain/expense.dart';
 import '../expense_providers.dart';
-import '../../../core/router/app_shell.dart';
 
+/// Pengeluaran operasional (padanan frame `09 · Owner / Pengeluaran`, juga
+/// dipakai workspace Kopi di frame `37`).
 class ExpensesView extends ConsumerWidget {
   const ExpensesView({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final month = ref.watch(reportMonthProvider);
-    return Scaffold(
-      appBar: AppBar(leading: shellMenuButton(context), title: const Text('Pengeluaran'), actions: const [MonthSwitcher()]),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _ExpenseDialog.show(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Pengeluaran'),
-      ),
-      body: AsyncValueView(
+    return PageScaffold(
+      title: 'Pengeluaran',
+      subtitle: 'Catat biaya operasional dan pantau total per bulan.',
+      actions: [
+        const MonthSwitcher(),
+        FilledButton.icon(
+          onPressed: () => _ExpenseDialog.show(context),
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Catat pengeluaran'),
+        ),
+      ],
+      scrollable: false,
+      child: AsyncValueView(
         value: ref.watch(expensesInMonthProvider(month)),
         data: (list) {
-          if (list.isEmpty) return const EmptyState(icon: Icons.receipt_outlined, message: 'Belum ada pengeluaran bulan ini');
+          if (list.isEmpty) {
+            return const EmptyState(
+              icon: Icons.receipt_outlined,
+              message: 'Belum ada pengeluaran bulan ini',
+              title: 'Tidak ada pengeluaran',
+            );
+          }
           final total = list.fold(0, (s, e) => s + e.amount);
+          final average = total ~/ list.length;
           return ListView(
-            padding: const EdgeInsets.only(bottom: 88),
+            padding: EdgeInsets.zero,
             children: [
-              ListTile(
-                title: const Text('Total bulan ini'),
-                trailing: Text(formatRupiah(total), style: Theme.of(context).textTheme.titleMedium),
+              KpiRow(
+                children: [
+                  KpiTile(
+                    label: 'Total pengeluaran',
+                    value: formatRupiah(total),
+                    hint: 'Bulan berjalan',
+                    icon: Icons.payments_outlined,
+                    highlight: true,
+                    width: null,
+                  ),
+                  KpiTile(
+                    label: 'Jumlah catatan',
+                    value: '${list.length}',
+                    hint: 'Catatan tercatat',
+                    icon: Icons.receipt_long_outlined,
+                    width: null,
+                  ),
+                  KpiTile(
+                    label: 'Rata-rata',
+                    value: formatRupiah(average),
+                    hint: 'Per catatan',
+                    icon: Icons.analytics_outlined,
+                    width: null,
+                  ),
+                ],
               ),
-              const Divider(height: 1),
-              for (final e in list)
-                ListTile(
-                  title: Text(e.category),
-                  subtitle: Text('${formatDate(e.date)}${e.note.isEmpty ? '' : ' · ${e.note}'}'),
-                  trailing: Text(formatRupiah(e.amount)),
-                  onTap: () => _ExpenseDialog.show(context, initial: e),
+              const SizedBox(height: AppSpacing.xl),
+              SectionCard(
+                title: 'Daftar pengeluaran',
+                subtitle: 'Ketuk baris untuk mengubah catatan.',
+                child: AppDataTable(
+                  columns: const ['Tanggal', 'Keterangan', 'Kategori', 'Nominal'],
+                  flex: const [3, 4, 3, 3],
+                  onTap: (i) => _ExpenseDialog.show(context, initial: list[i]),
+                  emptyLabel: 'Belum ada pengeluaran bulan ini.',
+                  rows: [
+                    for (final e in list)
+                      [
+                        Text(formatDate(e.date), style: Theme.of(context).textTheme.bodySmall),
+                        Text(
+                          e.note.isEmpty ? '—' : e.note,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        Text(e.category),
+                        Text(formatRupiah(e.amount), style: const TextStyle(fontWeight: FontWeight.w600)),
+                      ],
+                  ],
                 ),
+              ),
             ],
           );
         },

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_tokens.dart';
 import '../utils/product_image.dart';
 
 /// Foto produk dengan cadangan aman: tanpa foto / data rusak / gagal dirender -> ikon default.
@@ -9,7 +10,7 @@ class ProductImageView extends StatelessWidget {
     required this.imageBase64,
     required this.fallbackIcon,
     this.size,
-    this.borderRadius = 12,
+    this.borderRadius = AppRadius.tile,
     this.highlight = false,
   });
 
@@ -54,15 +55,15 @@ class _Placeholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final tokens = context.tokens;
+    final primary = Theme.of(context).colorScheme.primary;
+    final background = highlight ? tokens.warningTint : tokens.primaryTint;
+    final foreground = highlight ? tokens.warning : primary;
+
     return ColoredBox(
-      color: highlight ? scheme.error : scheme.primaryContainer,
+      color: background,
       child: Center(
-        child: Icon(
-          icon,
-          size: size == null ? 40 : size! * 0.5,
-          color: highlight ? scheme.onError : scheme.onPrimaryContainer,
-        ),
+        child: Icon(icon, size: size == null ? 40 : size! * 0.5, color: foreground),
       ),
     );
   }

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_tokens.dart';
+
 void showMessage(BuildContext context, String message, {bool isError = false}) {
-  final scheme = Theme.of(context).colorScheme;
+  final tokens = context.tokens;
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
       content: Text(message),
-      backgroundColor: isError ? scheme.error : null,
+      backgroundColor: isError ? tokens.danger : null,
     ));
 }
 

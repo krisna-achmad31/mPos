@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/router/app_shell.dart';
 import '../../../../core/utils/dates.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/async_value_view.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
+import '../../../../core/widgets/status_badge.dart';
 import '../../cafe_providers.dart';
 import '../../domain/cafe.dart';
 import '../cafe_view_models.dart';
@@ -19,66 +20,151 @@ String _unitCost(double v) => v >= 10 ? formatRupiah(v.round()) : 'Rp${formatQty
 
 final _decimal = [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))];
 
+/// Nada & label lencana status stok satu bahan.
+(BadgeTone, String) _stockStatus(Ingredient i) {
+  if (i.stock <= 0) return (BadgeTone.danger, 'Habis');
+  if (i.isLow) return (BadgeTone.warning, 'Menipis');
+  return (BadgeTone.success, 'Cukup');
+}
+
 /// Stok bahan baku POS kopi. Bahan dari distributor bertambah otomatis saat pesanan diterima.
 class IngredientsView extends ConsumerWidget {
   const IngredientsView({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(leading: shellMenuButton(context), title: const Text('Stok bahan')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _IngredientDialog.show(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Bahan'),
-      ),
-      body: AsyncValueView(
+    return PageScaffold(
+      title: 'Stok bahan',
+      subtitle: 'Stok berkurang mengikuti resep menu yang terjual.',
+      workspace: 'POS Kopi',
+      actions: [
+        FilledButton.icon(
+          onPressed: () => _IngredientDialog.show(context),
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Tambah bahan'),
+        ),
+      ],
+      child: AsyncValueView(
         value: ref.watch(ingredientsProvider),
         data: (list) {
           if (list.isEmpty) {
-            return const EmptyState(
+            return EmptyState(
               icon: Icons.inventory_2_outlined,
               message: 'Belum ada bahan.\nBelanja di distributor lalu konfirmasi "Diterima": bahan & stoknya masuk otomatis.',
+              action: FilledButton.icon(
+                onPressed: () => _IngredientDialog.show(context),
+                icon: const Icon(Icons.add),
+                label: const Text('Tambah bahan'),
+              ),
             );
           }
           final value = list.fold(0.0, (s, i) => s + i.stockValue);
-          return ListView(
-            padding: const EdgeInsets.only(bottom: 88),
-            children: [
-              ListTile(
-                title: Text('${list.length} bahan · ${list.where((i) => i.isLow).length} menipis'),
-                trailing: Text('Nilai ${formatRupiah(value.round())}', style: Theme.of(context).textTheme.titleSmall),
-              ),
-              const Divider(height: 1),
-              for (final i in list)
-                ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: i.isLow ? scheme.errorContainer : scheme.secondaryContainer,
-                    child: Icon(
-                      i.fromDistributor ? Icons.local_shipping_outlined : Icons.shopping_basket_outlined,
-                      color: i.isLow ? scheme.onErrorContainer : scheme.onSecondaryContainer,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(i.name),
-                  subtitle: Text([
-                    if (i.fromDistributor) 'Dari distributor',
-                    if (i.conversionLabel.isNotEmpty) i.conversionLabel,
-                    'HPP ${_unitCost(i.avgCost)}/${i.unit}',
-                  ].join(' · ')),
-                  trailing: Text(
-                    '${formatQty(i.stock)} ${i.unit}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: i.isLow ? scheme.error : null,
-                    ),
-                  ),
-                  onTap: () => _IngredientSheet.show(context, i),
-                ),
-            ],
+          final isPhone = context.deviceClass == DeviceClass.phone;
+          if (isPhone) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [for (final i in list) _IngredientCard(ingredient: i)],
+            );
+          }
+          return SectionCard(
+            title: '${list.length} bahan · ${list.where((i) => i.isLow).length} menipis',
+            subtitle: 'Nilai stok ${formatRupiah(value.round())}',
+            child: AppDataTable(
+              columns: const ['Bahan', 'Stok saat ini', 'Stok minimum', 'Harga modal', 'Status'],
+              flex: const [3, 2, 2, 2, 2],
+              emptyLabel: 'Belum ada bahan.',
+              onTap: (i) => _IngredientSheet.show(context, list[i]),
+              rows: [
+                for (final i in list)
+                  [
+                    Text(i.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text('${formatQty(i.stock)} ${i.unit}'),
+                    Text('${formatQty(i.minStock)} ${i.unit}'),
+                    Text('${_unitCost(i.avgCost)}/${i.unit}'),
+                    Align(alignment: Alignment.centerLeft, child: _statusBadge(i)),
+                  ],
+              ],
+            ),
           );
         },
+      ),
+    );
+  }
+}
+
+StatusBadge _statusBadge(Ingredient i) {
+  final (tone, label) = _stockStatus(i);
+  return StatusBadge(label, tone: tone, icon: tone == BadgeTone.success ? null : Icons.warning_amber_rounded);
+}
+
+/// Kartu satu bahan untuk layar HP: stok, status, dan aksi cepat.
+class _IngredientCard extends StatelessWidget {
+  const _IngredientCard({required this.ingredient});
+
+  final Ingredient ingredient;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
+    final i = ingredient;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
+      child: Material(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: InkWell(
+          onTap: () => _IngredientSheet.show(context, i),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadius.card),
+              border: Border.all(color: tokens.line),
+            ),
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: AppSpacing.sm,
+              children: [
+                Row(
+                  spacing: AppSpacing.sm,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        i.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall,
+                      ),
+                    ),
+                    _statusBadge(i),
+                  ],
+                ),
+                Text(
+                  '${formatQty(i.stock)} ${i.unit} · min ${formatQty(i.minStock)} ${i.unit}'
+                  '${i.fromDistributor ? ' · distributor' : ''}',
+                  style: theme.textTheme.bodySmall?.copyWith(color: tokens.muted),
+                ),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: () => _StockInDialog.show(context, i),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Tambah stok'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => _CountDialog.show(context, i),
+                      icon: const Icon(Icons.edit_outlined, size: 18),
+                      label: const Text('Koreksi'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -99,23 +185,25 @@ class _IngredientSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
     final current = ref.watch(ingredientMapProvider)[ingredient.id] ?? ingredient;
     final movements = ref.watch(ingredientMovementsProvider(ingredient.id)).value ?? const [];
-    final text = Theme.of(context).textTheme;
     return FractionallySizedBox(
       heightFactor: 0.8,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         children: [
-          Text(current.name, style: text.titleLarge),
+          Text(current.name, style: theme.textTheme.titleLarge),
           Text(
             'Stok ${formatQty(current.stock)} ${current.unit} · min ${formatQty(current.minStock)} ${current.unit}'
             '${current.conversionLabel.isEmpty ? '' : ' · ${current.conversionLabel}'}',
+            style: theme.textTheme.bodyMedium?.copyWith(color: tokens.muted),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             children: [
               FilledButton.icon(
                 onPressed: () => _StockInDialog.show(context, current),
@@ -151,7 +239,7 @@ class _IngredientSheet extends ConsumerWidget {
             ],
           ),
           const Divider(height: 32),
-          Text('Riwayat stok', style: text.titleSmall),
+          Text('Riwayat stok', style: theme.textTheme.titleSmall),
           if (movements.isEmpty) const Padding(padding: EdgeInsets.all(12), child: Text('Belum ada riwayat.')),
           for (final m in movements.take(50))
             ListTile(
@@ -161,7 +249,10 @@ class _IngredientSheet extends ConsumerWidget {
               subtitle: Text('${formatDateTime(m.at)}${m.note.isEmpty ? '' : ' · ${m.note}'}'),
               trailing: Text(
                 '${m.qty > 0 ? '+' : ''}${formatQty(m.qty)} ${current.unit}',
-                style: TextStyle(color: m.qty < 0 ? Theme.of(context).colorScheme.error : null),
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: m.qty < 0 ? tokens.danger : null,
+                ),
               ),
             ),
         ],
@@ -228,7 +319,7 @@ class _IngredientDialogState extends ConsumerState<_IngredientDialog> {
   @override
   Widget build(BuildContext context) {
     final busy = ref.watch(cafeActionsViewModelProvider).isLoading;
-    final small = Theme.of(context).textTheme.bodySmall;
+    final small = Theme.of(context).textTheme.bodySmall?.copyWith(color: context.tokens.muted);
     return AlertDialog(
       title: Text(_isNew ? 'Bahan baru' : 'Ubah bahan'),
       content: SizedBox(
@@ -292,7 +383,7 @@ class _IngredientDialogState extends ConsumerState<_IngredientDialog> {
                   decoration: const InputDecoration(labelText: 'Total harga stok awal (Rp)', helperText: 'Untuk menghitung HPP'),
                 ),
               ],
-              if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              if (_error != null) Text(_error!, style: TextStyle(color: context.tokens.danger)),
             ],
           ),
         ),
@@ -382,7 +473,7 @@ class _StockInDialogState extends ConsumerState<_StockInDialog> {
               decoration: const InputDecoration(labelText: 'Total harga beli (Rp)', helperText: 'Kosongkan bila HPP tidak berubah'),
             ),
             TextField(controller: _note, decoration: const InputDecoration(labelText: 'Catatan', hintText: 'mis. beli di pasar')),
-            if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            if (_error != null) Text(_error!, style: TextStyle(color: context.tokens.danger)),
           ],
         ),
       ),
@@ -456,7 +547,7 @@ class _CountDialogState extends ConsumerState<_CountDialog> {
               decoration: InputDecoration(labelText: 'Hasil hitung fisik', suffixText: i.unit),
             ),
             TextField(controller: _note, decoration: const InputDecoration(labelText: 'Catatan', hintText: 'mis. tumpah')),
-            if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            if (_error != null) Text(_error!, style: TextStyle(color: context.tokens.danger)),
           ],
         ),
       ),

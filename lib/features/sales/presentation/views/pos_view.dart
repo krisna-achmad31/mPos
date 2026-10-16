@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/money.dart';
-import '../../../../core/widgets/quantity_dialog.dart';
+import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../../core/widgets/product_picker.dart';
+import '../../../../core/widgets/quantity_dialog.dart';
+import '../../../../core/widgets/status_badge.dart';
 import '../../../auth/auth_providers.dart';
 import '../../../pricing/domain/services/pricing_service.dart';
 import '../../../products/domain/entities/product.dart';
@@ -15,9 +17,8 @@ import '../../../products/product_providers.dart';
 import '../../domain/entities/cart_line.dart';
 import '../../domain/services/sale_calculator.dart';
 import '../viewmodels/pos_view_model.dart';
-import '../widgets/totals_table.dart';
-import '../../../../core/router/app_shell.dart';
 import '../widgets/line_text.dart';
+import '../widgets/totals_table.dart';
 
 /// Kasir langsung untuk pembeli yang datang ke toko.
 class PosView extends ConsumerWidget {
@@ -35,23 +36,33 @@ class PosView extends ConsumerWidget {
       if (next.hasError) showMessage(context, '${next.error}', isError: true);
     });
 
-    return Scaffold(
-      appBar: AppBar(leading: shellMenuButton(context), title: const Text('Kasir')),
-      body: LayoutBuilder(builder: (context, constraints) {
-        if (constraints.maxWidth >= 900) {
-          return const Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(flex: 3, child: _CartPanel()),
-              VerticalDivider(width: 1),
-              SizedBox(width: 380, child: SingleChildScrollView(child: _PaymentPanel())),
-            ],
+    return PageScaffold(
+      title: 'Kasir',
+      subtitle: 'Pilih produk, atur jumlah, lalu catat pembayaran.',
+      scrollable: false,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth >= 900) {
+            return const Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 3, child: _CartPanel()),
+                SizedBox(width: AppSpacing.lg),
+                SizedBox(width: 380, child: SingleChildScrollView(child: _PaymentPanel())),
+              ],
+            );
+          }
+          return const SingleChildScrollView(
+            child: Column(
+              children: [
+                _CartPanel(shrinkWrap: true),
+                SizedBox(height: AppSpacing.lg),
+                _PaymentPanel(),
+              ],
+            ),
           );
-        }
-        return const SingleChildScrollView(
-          child: Column(children: [_CartPanel(shrinkWrap: true), Divider(), _PaymentPanel()]),
-        );
-      }),
+        },
+      ),
     );
   }
 }
@@ -105,65 +116,49 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
 
     final list = state.lines.isEmpty
         ? const Padding(
-            padding: EdgeInsets.all(32),
-            child: EmptyState(icon: Icons.shopping_cart_outlined, message: 'Scan barcode atau cari produk'),
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
+            child: EmptyState(
+              icon: Icons.shopping_cart_outlined,
+              title: 'Keranjang masih kosong',
+              message: 'Scan barcode atau cari produk untuk menambah barang.',
+            ),
           )
         : ListView.separated(
             shrinkWrap: widget.shrinkWrap,
             physics: widget.shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+            padding: EdgeInsets.zero,
             itemCount: state.lines.length,
             separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, i) {
               final line = state.lines[i];
               final discount = priced[i].discountAmount;
               final product = _productOf(line.productId);
-              return ListTile(
-                title: Text(line.name),
-                subtitle: Text([
-                  '${lineDetail(line)} (${line.priceType.label})',
-                  if (discount > 0) '${priced[i].discountLabel} −${formatRupiah(discount)}',
-                ].join(' · ')),
-                onLongPress: () => _manualPrice(i, line),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.remove_circle_outline),
-                      onPressed: product == null ? null : () => vm.setQty(i, line.qty - 1, product),
-                    ),
-                    TextButton(
-                      onPressed: product == null
-                          ? null
-                          : () async {
-                              final qty = await askQuantity(context, current: line.qty, unit: line.unit);
-                              if (qty != null) vm.setQty(i, qty, product);
-                            },
-                      child: Text('${line.qty}', style: Theme.of(context).textTheme.titleMedium),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add_circle_outline),
-                      onPressed: product == null ? null : () => vm.setQty(i, line.qty + 1, product),
-                    ),
-                    SizedBox(width: 110, child: Text(formatRupiah(line.gross - discount), textAlign: TextAlign.end)),
-                    PopupMenuButton<String>(
-                      onSelected: (v) => v == 'manual' ? _manualPrice(i, line) : vm.removeLine(i),
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'manual', child: Text('Harga manual')),
-                        PopupMenuItem(value: 'remove', child: Text('Hapus')),
-                      ],
-                    ),
-                  ],
-                ),
+              return _CartLineTile(
+                line: line,
+                discount: discount,
+                discountLabel: priced[i].discountLabel,
+                onDecrease: product == null ? null : () => vm.setQty(i, line.qty - 1, product),
+                onIncrease: product == null ? null : () => vm.setQty(i, line.qty + 1, product),
+                onQuantity: product == null
+                    ? null
+                    : () async {
+                        final qty = await askQuantity(context, current: line.qty, unit: line.unit);
+                        if (qty != null) vm.setQty(i, qty, product);
+                      },
+                onManual: () => _manualPrice(i, line),
+                onRemove: () => vm.removeLine(i),
               );
             },
           );
 
-    return Column(
-      mainAxisSize: widget.shrinkWrap ? MainAxisSize.min : MainAxisSize.max,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: ProductPicker(
+    return SectionCard(
+      title: 'Keranjang',
+      subtitle: 'Pesanan saat ini',
+      trailing: StatusBadge('${state.lines.length} item', tone: BadgeTone.neutral),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ProductPicker(
             key: ValueKey(_pickerKey),
             label: 'Scan barcode / cari produk',
             onSelected: (p) {
@@ -171,9 +166,128 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
               setState(() => _pickerKey++);
             },
           ),
+          const SizedBox(height: AppSpacing.md),
+          if (widget.shrinkWrap) list else Expanded(child: list),
+        ],
+      ),
+    );
+  }
+}
+
+class _CartLineTile extends StatelessWidget {
+  const _CartLineTile({
+    required this.line,
+    required this.discount,
+    required this.discountLabel,
+    required this.onDecrease,
+    required this.onIncrease,
+    required this.onQuantity,
+    required this.onManual,
+    required this.onRemove,
+  });
+
+  final CartLine line;
+  final int discount;
+  final String discountLabel;
+  final VoidCallback? onDecrease;
+  final VoidCallback? onIncrease;
+  final VoidCallback? onQuantity;
+  final VoidCallback onManual;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
+    return InkWell(
+      onLongPress: onManual,
+      borderRadius: BorderRadius.circular(AppRadius.control),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: AppSpacing.md,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 2,
+                children: [
+                  Text(
+                    line.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: tokens.ink),
+                  ),
+                  Text(
+                    [
+                      '${lineDetail(line)} (${line.priceType.label})',
+                      if (discount > 0) '$discountLabel −${formatRupiah(discount)}',
+                    ].join(' · '),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Row(
+                    children: [
+                      _QtyButton(icon: Icons.remove, tooltip: 'Kurangi', onPressed: onDecrease),
+                      TextButton(
+                        onPressed: onQuantity,
+                        child: Text('${line.qty}', style: theme.textTheme.titleSmall),
+                      ),
+                      _QtyButton(icon: Icons.add, tooltip: 'Tambah', onPressed: onIncrease),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              spacing: AppSpacing.xs,
+              children: [
+                Text(
+                  formatRupiah(line.gross - discount),
+                  style: theme.textTheme.titleSmall?.copyWith(color: tokens.ink),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Opsi baris',
+                  icon: Icon(Icons.more_vert, size: 18, color: tokens.muted),
+                  onSelected: (v) => v == 'manual' ? onManual() : onRemove(),
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'manual', child: Text('Harga manual')),
+                    PopupMenuItem(value: 'remove', child: Text('Hapus')),
+                  ],
+                ),
+              ],
+            ),
+          ],
         ),
-        if (widget.shrinkWrap) list else Expanded(child: list),
-      ],
+      ),
+    );
+  }
+}
+
+class _QtyButton extends StatelessWidget {
+  const _QtyButton({required this.icon, required this.tooltip, required this.onPressed});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    return IconButton(
+      icon: Icon(icon, size: 18),
+      tooltip: tooltip,
+      onPressed: onPressed,
+      visualDensity: VisualDensity.compact,
+      style: IconButton.styleFrom(
+        backgroundColor: tokens.canvas,
+        foregroundColor: tokens.ink,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.control)),
+      ),
     );
   }
 }
@@ -224,24 +338,56 @@ class _PaymentPanelState extends ConsumerState<_PaymentPanel> {
     final vm = ref.read(posViewModelProvider.notifier);
     final totals = ref.watch(posTotalsProvider);
     final customers = ref.watch(customersProvider).value ?? [];
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
     final total = totals.total;
     final given = state.amountGiven;
 
-    String? paymentInfo;
-    if (total > 0) {
-      paymentInfo = switch (state.method) {
-        PaymentMethod.cash => given >= total ? 'Kembalian ${formatRupiah(given - total)}' : 'Uang kurang ${formatRupiah(total - given)}',
-        PaymentMethod.transfer || PaymentMethod.qris => 'Dianggap lunas',
-        PaymentMethod.downPayment || PaymentMethod.credit => 'Sisa tagihan ${formatRupiah((total - given).clamp(0, total))}',
-      };
-    }
+    final (String? paymentInfo, BadgeTone? paymentTone) = total > 0
+        ? switch (state.method) {
+            PaymentMethod.cash => given >= total
+                ? ('Kembalian ${formatRupiah(given - total)}', BadgeTone.success)
+                : ('Uang kurang ${formatRupiah(total - given)}', BadgeTone.danger),
+            PaymentMethod.transfer || PaymentMethod.qris => ('Dianggap lunas', BadgeTone.success),
+            PaymentMethod.downPayment || PaymentMethod.credit =>
+              ('Sisa tagihan ${formatRupiah((total - given).clamp(0, total))}', BadgeTone.warning),
+          }
+        : (null, null);
 
-    return Padding(
-      padding: const EdgeInsets.all(16),
+    final Color noticeFg = paymentTone == BadgeTone.danger
+        ? tokens.danger
+        : paymentTone == BadgeTone.warning
+            ? tokens.warning
+            : tokens.success;
+    final Color noticeBg = paymentTone == BadgeTone.danger
+        ? tokens.dangerTint
+        : paymentTone == BadgeTone.warning
+            ? tokens.warningTint
+            : tokens.successTint;
+    final IconData noticeIcon = switch (paymentTone) {
+      BadgeTone.danger => Icons.error_outline,
+      BadgeTone.warning => Icons.schedule,
+      _ => Icons.check_circle_outline,
+    };
+
+    return SectionCard(
+      title: 'Pembayaran',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 12,
+        spacing: AppSpacing.md,
         children: [
+          KpiRow(
+            children: [
+              KpiTile(
+                label: 'Total pesanan',
+                value: formatRupiah(total),
+                hint: '${state.lines.length} item',
+                icon: Icons.receipt_long_outlined,
+                highlight: true,
+                width: null,
+              ),
+            ],
+          ),
           DropdownButtonFormField<String?>(
             key: ValueKey('customer-${state.customer?.uid}'),
             initialValue: state.customer?.uid,
@@ -259,7 +405,7 @@ class _PaymentPanelState extends ConsumerState<_PaymentPanel> {
             onChanged: vm.setSalesName,
           ),
           Row(
-            spacing: 8,
+            spacing: AppSpacing.sm,
             children: [
               Expanded(
                 child: TextField(
@@ -301,14 +447,33 @@ class _PaymentPanelState extends ConsumerState<_PaymentPanel> {
               ),
               onChanged: (v) => vm.setAmountGiven(parseRupiah(v)),
             ),
-          if (paymentInfo != null) Text(paymentInfo, style: Theme.of(context).textTheme.titleSmall),
+          if (paymentInfo != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+              decoration: BoxDecoration(
+                color: noticeBg,
+                borderRadius: BorderRadius.circular(AppRadius.control),
+              ),
+              child: Row(
+                spacing: AppSpacing.sm,
+                children: [
+                  Icon(noticeIcon, size: 18, color: noticeFg),
+                  Expanded(
+                    child: Text(
+                      paymentInfo,
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: noticeFg),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           FilledButton.icon(
             onPressed: state.lines.isEmpty || state.submission.isLoading ? null : _checkout,
             icon: const Icon(Icons.point_of_sale),
-            label: Text('Simpan ${formatRupiah(total)}'),
+            label: Text('Terima pembayaran · ${formatRupiah(total)}'),
           ),
           if (state.lines.any((l) => l.priceType == PriceType.manual))
-            Text('Ada harga manual: tercatat di log audit.', style: Theme.of(context).textTheme.bodySmall),
+            Text('Ada harga manual: tercatat di log audit.', style: theme.textTheme.bodySmall),
         ],
       ),
     );

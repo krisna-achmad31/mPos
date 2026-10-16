@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/router/app_shell.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../../core/widgets/product_image_view.dart';
+import '../../../../core/widgets/status_badge.dart';
 import '../../../stock/presentation/views/stock_opname_dialog.dart';
 import '../../../reports/domain/demo_catalog.dart';
 import '../../domain/entities/product.dart';
@@ -23,26 +24,26 @@ class ProductListView extends ConsumerWidget {
     final filter = ref.watch(productFilterProvider);
     final reorder = ref.watch(reorderProductsProvider).value ?? const <Product>[];
     final mode = ref.watch(productViewModeProvider);
-    final wide = MediaQuery.sizeOf(context).width >= 720;
+    final isPhone = context.deviceClass == DeviceClass.phone;
+    final showTable = mode == ProductViewMode.table && !isPhone;
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: shellMenuButton(context),
-        title: const Text('Produk'),
-        actions: [if (wide) const _InventoryTotals(), const _SampleProductsButton(), const SizedBox(width: 8)],
-      ),
-      floatingActionButton: const _AddButton(),
-      body: CustomScrollView(
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            sliver: SliverList.list(
+    return PageScaffold(
+      title: 'Produk & stok',
+      subtitle: 'Atur harga, stok, dan satuan dalam satu tempat.',
+      actions: [const _SampleProductsButton(), const _AddButton()],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!isPhone) ...[
+            _ProductKpis(reorder: reorder),
+            const SizedBox(height: AppSpacing.xl),
+          ],
+          SectionCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (!wide) const Align(alignment: Alignment.centerRight, child: _InventoryTotals()),
-                if (!wide) const SizedBox(height: 8),
-                if (reorder.isNotEmpty) _RestockBanner(products: reorder, active: filter.restockOnly),
                 Row(
-                  spacing: 12,
+                  spacing: AppSpacing.md,
                   children: [
                     Expanded(
                       child: TextField(
@@ -53,64 +54,97 @@ class ProductListView extends ConsumerWidget {
                         onChanged: ref.read(productSearchProvider.notifier).setQuery,
                       ),
                     ),
-                    SegmentedButton<ProductViewMode>(
-                      showSelectedIcon: false,
-                      segments: [
-                        ButtonSegment(
-                          value: ProductViewMode.cards,
-                          icon: const Icon(Icons.grid_view_rounded),
-                          label: wide ? const Text('Kartu') : null,
-                          tooltip: 'Tampilan kartu',
-                        ),
-                        ButtonSegment(
-                          value: ProductViewMode.table,
-                          icon: const Icon(Icons.table_chart_outlined),
-                          label: wide ? const Text('Tabel') : null,
-                          tooltip: 'Tampilan tabel',
-                        ),
-                      ],
-                      selected: {mode},
-                      onSelectionChanged: (s) => ref.read(productViewModeProvider.notifier).set(s.first),
-                    ),
+                    if (!isPhone)
+                      SegmentedButton<ProductViewMode>(
+                        showSelectedIcon: false,
+                        segments: const [
+                          ButtonSegment(
+                            value: ProductViewMode.cards,
+                            icon: Icon(Icons.grid_view_rounded),
+                            label: Text('Kartu'),
+                            tooltip: 'Tampilan kartu',
+                          ),
+                          ButtonSegment(
+                            value: ProductViewMode.table,
+                            icon: Icon(Icons.table_chart_outlined),
+                            label: Text('Tabel'),
+                            tooltip: 'Tampilan tabel',
+                          ),
+                        ],
+                        selected: {mode},
+                        onSelectionChanged: (s) => ref.read(productViewModeProvider.notifier).set(s.first),
+                      ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 const _FilterBar(),
-                const SizedBox(height: 12),
               ],
             ),
           ),
+          if (reorder.isNotEmpty) _RestockBanner(products: reorder, active: filter.restockOnly),
           ref
               .watch(filteredProductsProvider)
               .when(
-                loading: () => const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
-                error: (e, _) => SliverFillRemaining(child: Center(child: Text('$e'))),
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.xxxl),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (e, _) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxxl),
+                  child: Center(child: Text('$e')),
+                ),
                 data: (products) => products.isEmpty
-                    ? const SliverFillRemaining(
-                        hasScrollBody: false,
+                    ? const Padding(
+                        padding: EdgeInsets.symmetric(vertical: AppSpacing.xxl),
                         child: EmptyState(icon: Icons.inventory_2_outlined, message: 'Tidak ada produk'),
                       )
-                    : mode == ProductViewMode.table
-                    ? SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-                        sliver: SliverToBoxAdapter(child: _ProductTable(products: products)),
-                      )
-                    : SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 96),
-                        sliver: SliverGrid.builder(
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 560,
-                            mainAxisExtent: 132,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                          ),
-                          itemCount: products.length,
-                          itemBuilder: (context, i) => _ProductCard(product: products[i]),
-                        ),
-                      ),
+                    : showTable
+                    ? _ProductTable(products: products)
+                    : _ProductGrid(products: products),
               ),
         ],
       ),
+    );
+  }
+}
+
+/// Kartu angka ringkas: jumlah produk aktif, nilai persediaan, dan yang perlu restok.
+class _ProductKpis extends ConsumerWidget {
+  const _ProductKpis({required this.reorder});
+
+  final List<Product> reorder;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final products = ref.watch(productsProvider).value ?? const <Product>[];
+    final active = products.where((p) => p.active).length;
+    final bundles = products.where((p) => p.isBundle).length;
+    final summary = ref.watch(inventorySummaryProvider);
+
+    return KpiRow(
+      children: [
+        KpiTile(
+          label: 'Produk aktif',
+          value: '$active',
+          hint: '$bundles paket bundle tersedia',
+          icon: Icons.inventory_2_outlined,
+          width: null,
+        ),
+        KpiTile(
+          label: 'Nilai persediaan',
+          value: summary == null ? '—' : formatRupiah(summary.totalValue),
+          hint: 'Berdasarkan harga modal',
+          icon: Icons.account_balance_wallet_outlined,
+          width: null,
+        ),
+        KpiTile(
+          label: 'Perlu restok',
+          value: '${reorder.length} produk',
+          hint: 'Di bawah stok minimum',
+          icon: Icons.warning_amber_rounded,
+          width: null,
+        ),
+      ],
     );
   }
 }
@@ -122,7 +156,7 @@ class _AddButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MenuAnchor(
-      alignmentOffset: const Offset(0, -8),
+      alignmentOffset: const Offset(0, 8),
       menuChildren: [
         MenuItemButton(
           leadingIcon: const Icon(Icons.inventory_2_outlined),
@@ -135,70 +169,10 @@ class _AddButton extends StatelessWidget {
           child: const Text('Bundling baru'),
         ),
       ],
-      builder: (context, controller, _) => FloatingActionButton.extended(
+      builder: (context, controller, _) => FilledButton.icon(
         onPressed: () => controller.isOpen ? controller.close() : controller.open(),
-        icon: const Icon(Icons.add),
-        label: const Text('Tambah'),
-      ),
-    );
-  }
-}
-
-/// Total stok & nilai barang (stok × modal) seluruh produk, di kanan atas.
-class _InventoryTotals extends ConsumerWidget {
-  const _InventoryTotals();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final summary = ref.watch(inventorySummaryProvider);
-    final text = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
-    // Masih memuat produk / harga modal: tampilkan kotak yang sama dengan indikator loading.
-    final loading = summary == null;
-
-    Widget stat(String label, String? value, IconData icon) => Row(
-      mainAxisSize: MainAxisSize.min,
-      spacing: 8,
-      children: [
-        Icon(icon, size: 20, color: scheme.primary),
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-            if (value != null)
-              Text(value, style: text.titleSmall?.copyWith(fontWeight: FontWeight.w700))
-            else
-              const _LoadingValue(),
-          ],
-        ),
-      ],
-    );
-
-    return Tooltip(
-      message: loading
-          ? 'Menghitung total stok & nilai barang…'
-          : '${summary.productCount} produk yang dihitung stoknya. '
-                'Nilai barang = stok × harga modal (HPP rata-rata, atau harga beli bila HPP belum ada). '
-                'Bundling tidak dihitung karena isinya sudah terhitung.',
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: scheme.primaryContainer.withValues(alpha: 0.45),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 16,
-          children: [
-            stat('Total stok', loading ? null : formatNumber(summary.totalStock), Icons.inventory_outlined),
-            stat(
-              'Total nilai barang',
-              loading ? null : formatRupiah(summary.totalValue),
-              Icons.account_balance_wallet_outlined,
-            ),
-          ],
-        ),
+        icon: const Icon(Icons.add, size: 18),
+        label: const Text('Tambah produk'),
       ),
     );
   }
@@ -229,11 +203,12 @@ class _FilterBar extends ConsumerWidget {
     final vm = ref.read(productFilterProvider.notifier);
     final categories = ref.watch(productCategoriesProvider);
     final counts = ref.watch(_stockCountsProvider);
+    final tokens = context.tokens;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        spacing: 8,
+        spacing: AppSpacing.sm,
         children: [
           for (final f in [StockFilter.all, StockFilter.safe, StockFilter.low, StockFilter.out])
             ChoiceChip(
@@ -244,12 +219,12 @@ class _FilterBar extends ConsumerWidget {
             ),
           if (filter.restockOnly)
             InputChip(
-              avatar: Icon(Icons.warning_amber_rounded, color: Theme.of(context).colorScheme.error),
+              avatar: Icon(Icons.warning_amber_rounded, color: tokens.warning),
               label: const Text('Perlu restock'),
               selected: true,
               onDeleted: () => vm.setStock(StockFilter.all),
             ),
-          const SizedBox(height: 24, child: VerticalDivider()),
+          SizedBox(height: 24, child: VerticalDivider(color: tokens.line)),
           _MenuChip<ProductTypeFilter>(
             icon: Icons.redeem_outlined,
             value: filter.type,
@@ -285,7 +260,7 @@ class _FilterBar extends ConsumerWidget {
           if (filter.isFiltered)
             TextButton.icon(
               onPressed: vm.reset,
-              icon: const Icon(Icons.filter_alt_off_outlined),
+              icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
               label: const Text('Reset filter'),
             ),
         ],
@@ -353,10 +328,10 @@ class _MenuChip<T> extends StatelessWidget {
 
 /// Warna indikator stok: hijau aman, kuning menipis, merah habis.
 Color stockLevelColor(BuildContext context, StockLevel level) => switch (level) {
-  StockLevel.safe => const Color(0xFF2E7D32),
-  StockLevel.low => const Color(0xFFF9A825),
-  StockLevel.out => Theme.of(context).colorScheme.error,
-  StockLevel.untracked => Theme.of(context).colorScheme.outline,
+  StockLevel.safe => context.tokens.success,
+  StockLevel.low => context.tokens.warning,
+  StockLevel.out => context.tokens.danger,
+  StockLevel.untracked => context.tokens.muted,
 };
 
 class _StockDot extends StatelessWidget {
@@ -373,6 +348,7 @@ class _StockDot extends StatelessWidget {
   );
 }
 
+/// Lencana indikator stok (aman / menipis / habis).
 class _StockIndicator extends StatelessWidget {
   const _StockIndicator({required this.product});
 
@@ -381,23 +357,40 @@ class _StockIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final level = StockLevel.of(product);
-    final color = stockLevelColor(context, level);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(20)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        spacing: 6,
-        children: [
-          _StockDot(level: level, size: 10),
-          Text(level.label, style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
-        ],
-      ),
+    final tone = switch (level) {
+      StockLevel.safe => BadgeTone.success,
+      StockLevel.low => BadgeTone.warning,
+      StockLevel.out => BadgeTone.danger,
+      StockLevel.untracked => BadgeTone.neutral,
+    };
+    return StatusBadge(level.label, tone: tone);
+  }
+}
+
+/// Daftar produk: kartu di HP dan layar sempit, dibungkus sesuai lebar.
+class _ProductGrid extends StatelessWidget {
+  const _ProductGrid({required this.products});
+
+  final List<Product> products;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const spacing = AppSpacing.md;
+        final columns = (constraints.maxWidth / 560).ceil().clamp(1, 4);
+        final width = (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [for (final p in products) SizedBox(width: width, child: _ProductCard(product: p))],
+        );
+      },
     );
   }
 }
 
-/// Tampilan seperti Excel: satu baris per produk + baris total.
+/// Tabel produk: satu baris per produk + baris total.
 class _ProductTable extends ConsumerWidget {
   const _ProductTable({required this.products});
 
@@ -412,152 +405,90 @@ class _ProductTable extends ConsumerWidget {
     final summary = ref.watch(filteredInventorySummaryProvider);
     // Harga modal dibaca terpisah dari produk; selama belum ada, kolom modal & nilai menunggu.
     final costsLoading = !ref.watch(productCostsProvider).hasValue;
-    final text = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
-    final bold = text.bodyMedium?.copyWith(fontWeight: FontWeight.w700);
+    final theme = Theme.of(context);
+    final bold = theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700);
 
     int unitCost(Product p) => p.isBundle
         ? BundleRules.cost(p.bundleItems, (id) => InventorySummary.unitCost(costs[id]))
         : InventorySummary.unitCost(costs[p.id]);
 
-    DataCell money(int v, {TextStyle? style}) => DataCell(Text(v > 0 ? formatRupiah(v) : '-', style: style));
-    DataCell costMoney(int Function() v) => costsLoading ? const DataCell(_LoadingValue()) : money(v());
+    Widget money(int v, {TextStyle? style}) => Text(v > 0 ? formatRupiah(v) : '-', style: style);
+    Widget costCell(int Function() v) => costsLoading ? const _LoadingValue() : money(v());
 
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: scheme.outlineVariant),
-      ),
+    return SectionCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (costsLoading) const LinearProgressIndicator(minHeight: 3),
-          LayoutBuilder(
-            builder: (context, constraints) => SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                child: DataTable(
-                  headingRowColor: WidgetStatePropertyAll(scheme.surfaceContainerHigh),
-                  headingTextStyle: text.labelLarge?.copyWith(fontWeight: FontWeight.w700),
-                  columnSpacing: 24,
-                  dataRowMinHeight: 44,
-                  dataRowMaxHeight: 60,
-                  showCheckboxColumn: false,
-                  columns: const [
-                    DataColumn(label: Text('Nama')),
-                    DataColumn(label: Text('Keterangan')),
-                    DataColumn(label: Text('Harga modal'), numeric: true),
-                    DataColumn(label: Text('Harga satuan'), numeric: true),
-                    DataColumn(label: Text('Harga karton'), numeric: true),
-                    DataColumn(label: Text('Jumlah stok'), numeric: true),
-                    DataColumn(
-                      label: Tooltip(message: 'Jumlah stok × harga modal', child: Text('Nilai barang')),
-                      numeric: true,
-                    ),
-                    DataColumn(label: Text('Indikator stok')),
-                    DataColumn(label: Text('Aktif')),
-                  ],
-                  rows: [
-                    for (final p in products)
-                      DataRow(
-                        color: p.active ? null : WidgetStatePropertyAll(scheme.surfaceContainerLow),
-                        onSelectChanged: (_) => context.go('/owner/products/${p.id}'),
-                        cells: [
-                          DataCell(
-                            ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 260),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                spacing: 6,
-                                children: [
-                                  if (p.isBundle) Icon(Icons.redeem_outlined, size: 18, color: scheme.primary),
-                                  Flexible(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          p.name,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: p.active ? null : TextStyle(color: scheme.outline),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          DataCell(_Remarks(product: p)),
-                          costMoney(() => unitCost(p)),
-                          money(p.sellPrice),
-                          money(_carton(p)?.price ?? 0),
-                          DataCell(
-                            Text(
-                              !p.trackStock ? '-' : '${formatNumber(p.stock)} ${p.unit}',
-                              style: TextStyle(color: p.isBundle ? scheme.onSurfaceVariant : null),
-                            ),
-                          ),
-                          p.isBundle
-                              ? const DataCell(
-                                  Tooltip(message: 'Bundling: nilai sudah dihitung di produk isinya', child: Text('-')),
-                                )
-                              : costMoney(() => InventorySummary.valueOf(p, costs[p.id])),
-                          DataCell(_StockIndicator(product: p)),
-                          DataCell(_ActiveSwitch(product: p)),
-                        ],
-                      ),
-                    if (summary != null)
-                      DataRow(
-                        color: WidgetStatePropertyAll(scheme.surfaceContainerHigh),
-                        cells: [
-                          DataCell(Text('Total (${products.length} baris)', style: bold)),
-                          const DataCell(Text('')),
-                          const DataCell(Text('')),
-                          const DataCell(Text('')),
-                          const DataCell(Text('')),
-                          DataCell(Text(formatNumber(summary.totalStock), style: bold)),
-                          costsLoading
-                              ? const DataCell(_LoadingValue())
-                              : DataCell(Text(formatRupiah(summary.totalValue), style: bold)),
-                          const DataCell(Text('')),
-                          const DataCell(Text('')),
-                        ],
-                      ),
-                  ],
-                ),
-              ),
+          if (costsLoading)
+            const Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.md),
+              child: LinearProgressIndicator(minHeight: 3),
             ),
+          AppDataTable(
+            columns: const [
+              'Produk',
+              'Keterangan',
+              'Harga modal',
+              'Harga satuan',
+              'Harga karton',
+              'Stok',
+              'Nilai barang',
+              'Status',
+              'Aktif',
+            ],
+            flex: const [3, 3, 2, 2, 2, 2, 2, 2, 1],
+            emptyLabel: 'Tidak ada produk',
+            rows: [
+              for (final p in products)
+                [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 6,
+                    children: [
+                      if (p.isBundle) Icon(Icons.redeem_outlined, size: 16, color: theme.colorScheme.primary),
+                      Flexible(
+                        child: Text(
+                          p.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: p.active ? context.tokens.ink : context.tokens.muted,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  _Remarks(product: p),
+                  costCell(() => unitCost(p)),
+                  money(p.sellPrice),
+                  money(_carton(p)?.price ?? 0),
+                  Text(
+                    !p.trackStock ? '-' : '${formatNumber(p.stock)} ${p.unit}',
+                    style: TextStyle(color: p.isBundle ? context.tokens.muted : null),
+                  ),
+                  p.isBundle
+                      ? const Text('-')
+                      : costCell(() => InventorySummary.valueOf(p, costs[p.id])),
+                  _StockIndicator(product: p),
+                  _ActiveSwitch(product: p),
+                ],
+              if (summary != null)
+                [
+                  Text('Total (${products.length} baris)', style: bold),
+                  const Text(''),
+                  const Text(''),
+                  const Text(''),
+                  const Text(''),
+                  Text(formatNumber(summary.totalStock), style: bold),
+                  costsLoading ? const _LoadingValue() : Text(formatRupiah(summary.totalValue), style: bold),
+                  const Text(''),
+                  const Text(''),
+                ],
+            ],
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Nama produk + keterangan isi kemasan di sebelahnya (tampilan kartu).
-class _NameWithPacks extends StatelessWidget {
-  const _NameWithPacks({required this.product, this.style});
-
-  final Product product;
-  final TextStyle? style;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = product.packsLabel;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      spacing: 8,
-      children: [
-        Flexible(
-          child: Text(product.name, style: style, maxLines: 1, overflow: TextOverflow.ellipsis),
-        ),
-        if (label.isNotEmpty) Flexible(child: _Badge(label)),
-      ],
     );
   }
 }
@@ -572,23 +503,20 @@ class _Remarks extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = product;
     if (p.isBundle) {
-      return ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 280),
-        child: Text(
-          'Isi: ${BundleRules.contentsLabel(p.bundleItems)}',
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
+      return Text(
+        'Isi: ${BundleRules.contentsLabel(p.bundleItems)}',
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.bodySmall,
       );
     }
     final packs = p.packsBySize;
     if (packs.isEmpty) {
       return Text('Satuan (${p.unit})', style: Theme.of(context).textTheme.bodySmall);
     }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Wrap(
       spacing: 6,
+      runSpacing: 4,
       children: [for (final pack in packs) _Badge(pack.label(p.unit))],
     );
   }
@@ -601,19 +529,22 @@ class _Badge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final tokens = context.tokens;
     return Tooltip(
       message: label,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(8)),
+        decoration: BoxDecoration(
+          color: tokens.primaryTint,
+          borderRadius: BorderRadius.circular(AppRadius.badge),
+        ),
         child: Text(
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: Theme.of(
             context,
-          ).textTheme.labelSmall?.copyWith(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w600),
+          ).textTheme.labelSmall?.copyWith(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -660,7 +591,7 @@ IconData categoryIcon(String category) {
   return Icons.inventory_2_outlined;
 }
 
-/// Banner merah yang selalu terlihat saat ada produk di bawah stok minimum.
+/// Banner kuning yang selalu terlihat saat ada produk di bawah stok minimum.
 class _RestockBanner extends ConsumerWidget {
   const _RestockBanner({required this.products, required this.active});
 
@@ -669,40 +600,35 @@ class _RestockBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
     final out = products.where((p) => p.isOutOfStock).length;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: scheme.errorContainer,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.error, width: 1.5),
-      ),
+    return SectionCard(
+      highlight: false,
       child: Row(
-        spacing: 16,
+        spacing: AppSpacing.lg,
         children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: scheme.error,
-            child: Icon(Icons.notification_important, color: scheme.onError),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(color: tokens.warningTint, shape: BoxShape.circle),
+            child: Icon(Icons.warning_amber_rounded, color: tokens.warning),
           ),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 4,
+              spacing: 2,
               children: [
                 Text(
-                  '${products.length} produk perlu restock',
-                  style: text.titleMedium?.copyWith(color: scheme.onErrorContainer, fontWeight: FontWeight.w700),
+                  '${products.length} produk perlu diisi ulang',
+                  style: theme.textTheme.titleSmall?.copyWith(color: tokens.warning),
                 ),
                 Text(
                   [
                     if (out > 0) '$out habis',
                     products.take(3).map((p) => p.name).join(', ') + (products.length > 3 ? ', …' : ''),
                   ].join(' · '),
-                  style: text.bodyMedium?.copyWith(color: scheme.onErrorContainer),
+                  style: theme.textTheme.bodySmall?.copyWith(color: tokens.muted),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -710,19 +636,17 @@ class _RestockBanner extends ConsumerWidget {
             ),
           ),
           Wrap(
-            spacing: 8,
-            runSpacing: 8,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             alignment: WrapAlignment.end,
             children: [
               OutlinedButton(
-                style: OutlinedButton.styleFrom(foregroundColor: scheme.onErrorContainer),
                 onPressed: () => ref.read(productFilterProvider.notifier).toggleRestock(),
                 child: Text(active ? 'Tampilkan semua' : 'Lihat daftar'),
               ),
               FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: scheme.error, foregroundColor: scheme.onError),
                 onPressed: () => context.go('/owner/stock-in'),
-                icon: const Icon(Icons.add_shopping_cart),
+                icon: const Icon(Icons.add_shopping_cart, size: 18),
                 label: const Text('Restock sekarang'),
               ),
             ],
@@ -740,31 +664,39 @@ class _ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
     final p = product;
     final low = p.active && p.needsReorder;
+    final meta = [
+      if (p.isBundle) 'isi: ${BundleRules.contentsLabel(p.bundleItems)}',
+      if (p.hasWholesale) 'grosir ${formatRupiah(p.wholesalePrice)} (≥${p.wholesaleMinQty})',
+      for (final pack in p.packsBySize) '${ProductPack.canonicalName(pack.name)} ${formatRupiah(pack.price)}',
+      if (p.category.isNotEmpty && !p.isBundle) p.category,
+      if (!p.active) 'nonaktif',
+    ].join(' · ');
 
     return Opacity(
-      opacity: p.active ? 1 : 0.55,
-      child: Card(
-        margin: EdgeInsets.zero,
-        color: low ? scheme.errorContainer.withValues(alpha: 0.35) : null,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: low ? scheme.error : scheme.outlineVariant, width: low ? 1.5 : 1),
+      opacity: p.active ? 1 : 0.6,
+      child: Container(
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(color: low ? tokens.danger : tokens.line, width: low ? 1.5 : 1),
         ),
-        clipBehavior: Clip.antiAlias,
         child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.card),
           onTap: () => context.go('/owner/products/${p.id}'),
           child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 14,
+              mainAxisSize: MainAxisSize.min,
+              spacing: AppSpacing.sm,
               children: [
-                Stack(
-                  clipBehavior: Clip.none,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: AppSpacing.md,
                   children: [
                     ProductImageView(
                       imageBase64: p.imageBase64,
@@ -772,51 +704,30 @@ class _ProductCard extends StatelessWidget {
                           ? Icons.priority_high
                           : (p.isBundle ? Icons.redeem_outlined : categoryIcon(p.category)),
                       highlight: low,
-                      size: 64,
+                      size: 44,
                     ),
-                    // Foto menutupi tanda restock, jadi tampilkan lencana kecil.
-                    if (low && p.hasImage)
-                      Positioned(
-                        right: -4,
-                        top: -4,
-                        child: CircleAvatar(
-                          radius: 10,
-                          backgroundColor: scheme.error,
-                          child: Icon(Icons.priority_high, size: 14, color: scheme.onError),
-                        ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        spacing: AppSpacing.xs,
+                        children: [
+                          Text(
+                            p.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall,
+                          ),
+                          Text(
+                            [
+                              if (p.sku.isNotEmpty) p.sku,
+                              p.trackStock ? '${formatNumber(p.stock)} ${p.unit}' : 'tanpa stok',
+                            ].join(' · '),
+                            style: theme.textTheme.bodySmall?.copyWith(color: tokens.muted),
+                          ),
+                          Text(formatRupiah(p.sellPrice), style: theme.textTheme.titleMedium),
+                        ],
                       ),
-                  ],
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    spacing: 4,
-                    children: [
-                      _NameWithPacks(product: p, style: text.titleMedium),
-                      Text(
-                        [
-                          if (p.isBundle) 'BUNDLING',
-                          formatRupiah(p.sellPrice),
-                          if (p.isBundle) 'isi: ${BundleRules.contentsLabel(p.bundleItems)}',
-                          if (p.hasWholesale) 'grosir ${formatRupiah(p.wholesalePrice)} (≥${p.wholesaleMinQty})',
-                          for (final pack in p.packsBySize)
-                            '${ProductPack.canonicalName(pack.name)} ${formatRupiah(pack.price)}',
-                          if (p.category.isNotEmpty && !p.isBundle) p.category,
-                          if (!p.active) 'nonaktif',
-                        ].join(' · '),
-                        style: text.bodySmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const Spacer(),
-                      _StockBar(product: p),
-                    ],
-                  ),
-                ),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
+                    ),
                     PopupMenuButton<String>(
                       padding: EdgeInsets.zero,
                       onSelected: (value) {
@@ -832,23 +743,33 @@ class _ProductCard extends StatelessWidget {
                           const PopupMenuItem(value: 'opname', child: Text('Stock opname')),
                       ],
                     ),
-                    if (p.isBundle)
-                      Tooltip(
-                        message: p.active ? 'Tampil di katalog pelanggan' : 'Disembunyikan dari katalog',
-                        child: _ActiveSwitch(product: p),
-                      ),
-                    if (low)
-                      FilledButton.tonal(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: scheme.error,
-                          foregroundColor: scheme.onError,
-                          visualDensity: VisualDensity.compact,
-                        ),
-                        onPressed: () => context.go('/owner/stock-in'),
-                        child: const Text('Restock'),
-                      ),
                   ],
                 ),
+                if (meta.isNotEmpty)
+                  Text(
+                    meta,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall?.copyWith(color: tokens.muted),
+                  ),
+                _StockBar(product: p),
+                if (low || p.isBundle)
+                  Row(
+                    spacing: AppSpacing.sm,
+                    children: [
+                      if (low)
+                        FilledButton.tonal(
+                          style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                          onPressed: () => context.go('/owner/stock-in'),
+                          child: const Text('Restock'),
+                        ),
+                      if (p.isBundle)
+                        Tooltip(
+                          message: p.active ? 'Tampil di katalog pelanggan' : 'Disembunyikan dari katalog',
+                          child: _ActiveSwitch(product: p),
+                        ),
+                    ],
+                  ),
               ],
             ),
           ),
@@ -867,7 +788,7 @@ class _StockBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = product;
-    final scheme = Theme.of(context).colorScheme;
+    final tokens = context.tokens;
     final text = Theme.of(context).textTheme;
     if (p.isBundle) {
       final level = StockLevel.of(p);
@@ -898,19 +819,22 @@ class _StockBar extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: 4,
+      spacing: AppSpacing.xs,
       children: [
         Text(
           label,
-          style: text.labelMedium?.copyWith(color: low ? scheme.error : null, fontWeight: low ? FontWeight.w700 : null),
+          style: text.labelMedium?.copyWith(
+            color: low ? tokens.danger : null,
+            fontWeight: low ? FontWeight.w700 : null,
+          ),
         ),
         ClipRRect(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(AppSpacing.xs),
           child: LinearProgressIndicator(
             value: (p.stock / target).clamp(0.0, 1.0),
             minHeight: 6,
             color: color,
-            backgroundColor: scheme.surfaceContainerHighest,
+            backgroundColor: tokens.line,
           ),
         ),
       ],
@@ -925,11 +849,11 @@ class _SampleProductsButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final busy = ref.watch(sampleProductsViewModelProvider).isLoading;
-    return TextButton.icon(
+    return OutlinedButton.icon(
       icon: busy
           ? const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2))
-          : const Icon(Icons.coffee_outlined),
-      label: const Text('Produk contoh (cafe)'),
+          : const Icon(Icons.coffee_outlined, size: 18),
+      label: const Text('Produk contoh'),
       onPressed: busy
           ? null
           : () async {

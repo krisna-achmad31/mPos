@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/products/domain/entities/product.dart';
 import '../../features/products/product_providers.dart';
+import '../theme/app_tokens.dart';
 import '../utils/money.dart';
 
 /// Kolom pencarian produk aktif (nama, SKU, atau barcode).
@@ -39,27 +40,42 @@ class ProductPicker extends ConsumerWidget {
           }
         },
       ),
-      optionsViewBuilder: (context, onSelect, options) => Align(
-        alignment: Alignment.topLeft,
-        child: Material(
-          elevation: 4,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 320, maxWidth: 480),
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                for (final p in options)
-                  ListTile(
+      optionsViewBuilder: (context, onSelect, options) {
+        final theme = Theme.of(context);
+        final tokens = context.tokens;
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 8,
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            clipBehavior: Clip.antiAlias,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 320, maxWidth: 480),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: options.length,
+                separatorBuilder: (_, _) => Divider(height: 1, color: tokens.line),
+                itemBuilder: (context, index) {
+                  final p = options.elementAt(index);
+                  return ListTile(
                     dense: true,
-                    title: Text(p.isBundle ? '${p.name} (bundling)' : p.name),
-                    subtitle: Text('${formatRupiah(p.sellPrice)} · ${p.trackStock ? 'stok ${p.stock}' : 'tanpa stok'}'),
+                    title: Text(
+                      p.isBundle ? '${p.name} (bundling)' : p.name,
+                      style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      '${formatRupiah(p.sellPrice)} · ${p.trackStock ? 'stok ${p.stock}' : 'tanpa stok'}',
+                      style: theme.textTheme.bodySmall?.copyWith(color: tokens.muted),
+                    ),
                     onTap: () => onSelect(p),
-                  ),
-              ],
+                  );
+                },
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

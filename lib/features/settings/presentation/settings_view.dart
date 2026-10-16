@@ -3,20 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/utils/png_logo.dart';
+import '../../../core/widgets/app_layout.dart';
+import '../../../core/widgets/appearance_picker.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../../../core/widgets/feedback.dart';
 import '../domain/store_settings.dart';
 import '../settings_providers.dart';
-import '../../../core/router/app_shell.dart';
 
+/// Pengaturan toko & nota (padanan frame `18 · Owner / Pengaturan`).
 class SettingsView extends ConsumerWidget {
   const SettingsView({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      appBar: AppBar(leading: shellMenuButton(context), title: const Text('Pengaturan Toko & Nota')),
-      body: AsyncValueView(
+    return PageScaffold(
+      title: 'Pengaturan',
+      subtitle: 'Profil distributor, pajak, dan tampilan nota.',
+      scrollable: false,
+      child: AsyncValueView(
         value: ref.watch(storeSettingsProvider),
         data: (settings) => _SettingsForm(initial: settings),
       ),
@@ -76,59 +80,77 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
   Widget build(BuildContext context) {
     final busy = ref.watch(settingsViewModelProvider).isLoading;
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.zero,
       children: [
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 640),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: 16,
-              children: [
-                Text('Profil toko', style: Theme.of(context).textTheme.titleMedium),
-                TextField(controller: _name, decoration: const InputDecoration(labelText: 'Nama toko / distributor (kop invoice)')),
-                TextField(controller: _address, maxLines: 2, decoration: const InputDecoration(labelText: 'Alamat')),
-                TextField(controller: _phone, decoration: const InputDecoration(labelText: 'Telepon')),
-                TextField(
-                  controller: _email,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email (tampil di invoice)'),
-                ),
-                const _LogoSection(),
-                Text('Pajak', style: Theme.of(context).textTheme.titleMedium),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Aktifkan pajak (PPN)'),
-                  value: _taxEnabled,
-                  onChanged: (v) => setState(() => _taxEnabled = v),
-                ),
-                if (_taxEnabled)
-                  TextField(
-                    controller: _tax,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Persentase pajak', suffixText: '%'),
-                  ),
-                Text('Nota', style: Theme.of(context).textTheme.titleMedium),
-                DropdownButtonFormField<String>(
-                  initialValue: _noteType,
-                  decoration: const InputDecoration(labelText: 'Jenis nota default'),
-                  items: const [
-                    DropdownMenuItem(value: 'struk58', child: Text('Struk 58 mm')),
-                    DropdownMenuItem(value: 'struk80', child: Text('Struk 80 mm')),
-                    DropdownMenuItem(value: 'invoice', child: Text('Invoice A4')),
-                    DropdownMenuItem(value: 'faktur', child: Text('Faktur')),
-                  ],
-                  onChanged: (v) => setState(() => _noteType = v ?? _noteType),
-                ),
-                TextField(controller: _bank, maxLines: 2, decoration: const InputDecoration(labelText: 'Rekening bank (tampil di invoice)')),
-                TextField(controller: _receiptFooter, maxLines: 3, decoration: const InputDecoration(labelText: 'Footer struk')),
-                TextField(controller: _invoiceFooter, maxLines: 2, decoration: const InputDecoration(labelText: 'Footer invoice / faktur')),
-                TextField(controller: _signature, decoration: const InputDecoration(labelText: 'Nama penanda tangan (Hormat kami)')),
-                FilledButton.icon(onPressed: busy ? null : _save, icon: const Icon(Icons.save), label: const Text('Simpan')),
-              ],
-            ),
+        SectionCard(
+          title: 'Profil distributor',
+          subtitle: 'Data ini muncul sebagai kop pada invoice dan dokumen.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: AppSpacing.md,
+            children: [
+              TextField(controller: _name, decoration: const InputDecoration(labelText: 'Nama toko / distributor')),
+              TextField(controller: _address, maxLines: 2, decoration: const InputDecoration(labelText: 'Alamat')),
+              TextField(controller: _phone, decoration: const InputDecoration(labelText: 'Telepon')),
+              TextField(
+                controller: _email,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Email (tampil di invoice)'),
+              ),
+            ],
           ),
         ),
+        SectionCard(
+          title: 'Logo nota',
+          subtitle: 'PNG transparan untuk kop invoice.',
+          child: const _LogoSection(),
+        ),
+        SectionCard(
+          title: 'Nota & pajak',
+          subtitle: 'Jenis nota default, PPN, dan teks penutup.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: AppSpacing.md,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Aktifkan pajak (PPN)'),
+                value: _taxEnabled,
+                onChanged: (v) => setState(() => _taxEnabled = v),
+              ),
+              if (_taxEnabled)
+                TextField(
+                  controller: _tax,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(labelText: 'Persentase pajak', suffixText: '%'),
+                ),
+              DropdownButtonFormField<String>(
+                initialValue: _noteType,
+                decoration: const InputDecoration(labelText: 'Jenis nota default'),
+                items: const [
+                  DropdownMenuItem(value: 'struk58', child: Text('Struk 58 mm')),
+                  DropdownMenuItem(value: 'struk80', child: Text('Struk 80 mm')),
+                  DropdownMenuItem(value: 'invoice', child: Text('Invoice A4')),
+                  DropdownMenuItem(value: 'faktur', child: Text('Faktur')),
+                ],
+                onChanged: (v) => setState(() => _noteType = v ?? _noteType),
+              ),
+              TextField(controller: _bank, maxLines: 2, decoration: const InputDecoration(labelText: 'Rekening bank (tampil di invoice)')),
+              TextField(controller: _receiptFooter, maxLines: 3, decoration: const InputDecoration(labelText: 'Footer struk')),
+              TextField(controller: _invoiceFooter, maxLines: 2, decoration: const InputDecoration(labelText: 'Footer invoice / faktur')),
+              TextField(controller: _signature, decoration: const InputDecoration(labelText: 'Nama penanda tangan (Hormat kami)')),
+            ],
+          ),
+        ),
+        SectionCard(
+          title: 'Tampilan aplikasi',
+          subtitle: 'Terang, gelap, atau ikut pengaturan perangkat. Pilihan tersimpan di perangkat ini.',
+          child: const Align(
+            alignment: Alignment.centerLeft,
+            child: AppearancePicker(),
+          ),
+        ),
+        FilledButton.icon(onPressed: busy ? null : _save, icon: const Icon(Icons.save), label: const Text('Simpan')),
       ],
     );
   }
@@ -162,36 +184,37 @@ class _LogoSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
     final logo = ref.watch(distributorLogoProvider).value;
     final busy = ref.watch(settingsViewModelProvider).isLoading;
-    final scheme = Theme.of(context).colorScheme;
     return Row(
-      spacing: 16,
+      spacing: AppSpacing.lg,
       children: [
         Container(
           width: 96,
           height: 64,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            border: Border.all(color: scheme.outlineVariant),
-            borderRadius: BorderRadius.circular(8),
+            color: tokens.canvas,
+            border: Border.all(color: tokens.line),
+            borderRadius: BorderRadius.circular(AppRadius.control),
           ),
           child: logo == null
-              ? Text('Tanpa logo', style: Theme.of(context).textTheme.bodySmall)
+              ? Text('Tanpa logo', style: theme.textTheme.bodySmall)
               : Padding(padding: const EdgeInsets.all(6), child: Image.memory(logo, fit: BoxFit.contain)),
         ),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 4,
+            spacing: AppSpacing.sm,
             children: [
-              Text('Logo invoice', style: Theme.of(context).textTheme.titleSmall),
               Text(
                 'PNG transparan, maks ${maxLogoBytes ~/ 1024} KB. Tanpa logo, invoice hanya menampilkan nama distributor.',
-                style: Theme.of(context).textTheme.bodySmall,
+                style: theme.textTheme.bodySmall,
               ),
               Wrap(
-                spacing: 8,
+                spacing: AppSpacing.sm,
                 children: [
                   OutlinedButton.icon(
                     onPressed: busy ? null : () => _pick(context, ref),

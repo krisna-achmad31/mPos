@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_mode_provider.dart';
 
 /// Di web/desktop Flutter tidak menggeser list dengan drag mouse secara default,
 /// sehingga list (dan baris chip horizontal) terasa macet di Chrome. Izinkan semua perangkat.
@@ -26,6 +27,9 @@ class MposApp extends ConsumerWidget {
       scrollBehavior: const AppScrollBehavior(),
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
+      // Terang / Gelap / Ikuti sistem. Bisa diganti dari menu Tampilan
+      // (sidebar, daftar menu HP, atau Pengaturan).
+      themeMode: ref.watch(themeModeProvider),
       routerConfig: ref.watch(routerProvider),
       locale: const Locale('id', 'ID'),
       supportedLocales: const [Locale('id', 'ID'), Locale('en')],

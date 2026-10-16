@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/app_layout.dart' as layout;
 import '../../domain/sales_report.dart';
 
 class SectionCard extends StatelessWidget {
@@ -14,36 +15,8 @@ class SectionCard extends StatelessWidget {
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: text.titleMedium),
-                      if (subtitle != null) Text(subtitle!, style: text.bodySmall),
-                    ],
-                  ),
-                ),
-                ?trailing,
-              ],
-            ),
-            const SizedBox(height: 12),
-            child,
-          ],
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      layout.SectionCard(title: title, subtitle: subtitle, trailing: trailing, child: child);
 }
 
 class KpiTile extends StatelessWidget {
@@ -55,28 +28,7 @@ class KpiTile extends StatelessWidget {
   final IconData? icon;
 
   @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return SizedBox(
-      width: 200,
-      child: Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 4,
-            children: [
-              if (icon != null) Icon(icon, size: 20, color: Theme.of(context).colorScheme.primary),
-              Text(value, style: text.titleLarge, maxLines: 1, overflow: TextOverflow.ellipsis),
-              Text(label, style: text.bodyMedium),
-              if (hint != null) Text(hint!, style: text.bodySmall),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => layout.KpiTile(label: label, value: value, hint: hint, icon: icon);
 }
 
 /// Grafik batang omzet per waktu (per hari dalam sebulan, atau per jam dalam sehari).

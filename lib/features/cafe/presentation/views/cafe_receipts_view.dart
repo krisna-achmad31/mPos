@@ -3,12 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:printing/printing.dart';
 
-import '../../../../core/router/app_shell.dart';
 import '../../../../core/utils/dates.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/async_value_view.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
+import '../../../../core/widgets/status_badge.dart';
 import '../../../reports/presentation/widgets/report_widgets.dart' show timeOf;
 import '../../../sales/domain/entities/invoice.dart';
 import '../../../sales/presentation/viewmodels/report_view_model.dart';
@@ -33,69 +34,135 @@ class _CafeReceiptsViewState extends ConsumerState<CafeReceiptsView> {
 
   void _shift(int days) => setState(() => _day = DateTime(_day.year, _day.month, _day.day + days));
 
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _day,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) setState(() => _day = startOfDay(picked));
+  }
+
   @override
   Widget build(BuildContext context) {
     final next = DateTime(_day.year, _day.month, _day.day + 1);
-    return Scaffold(
-      appBar: AppBar(
-        leading: shellMenuButton(context),
-        title: const Text('Riwayat struk'),
-        actions: [
-          IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => _shift(-1)),
-          TextButton(
-            onPressed: () async {
-              final picked = await showDatePicker(
-                context: context,
-                initialDate: _day,
-                firstDate: DateTime(2020),
-                lastDate: DateTime.now(),
-              );
-              if (picked != null) setState(() => _day = startOfDay(picked));
-            },
-            child: Text(formatDate(_day)),
-          ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            onPressed: next.isAfter(DateTime.now()) ? null : () => _shift(1),
-          ),
-        ],
-      ),
-      body: AsyncValueView(
+    final isPhone = context.deviceClass == DeviceClass.phone;
+
+    return PageScaffold(
+      title: 'Riwayat struk',
+      subtitle: 'Cari transaksi dan cetak ulang struk.',
+      workspace: 'POS Kopi',
+      actions: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              tooltip: 'Hari sebelumnya',
+              icon: const Icon(Icons.chevron_left),
+              onPressed: () => _shift(-1),
+            ),
+            OutlinedButton.icon(
+              onPressed: _pickDate,
+              icon: const Icon(Icons.calendar_month_outlined, size: 18),
+              label: Text(formatDate(_day)),
+            ),
+            IconButton(
+              tooltip: 'Hari berikutnya',
+              icon: const Icon(Icons.chevron_right),
+              onPressed: next.isAfter(DateTime.now()) ? null : () => _shift(1),
+            ),
+          ],
+        ),
+      ],
+      child: AsyncValueView(
         value: ref.watch(invoicesInMonthProvider(startOfMonth(_day))),
         data: (all) {
-          final list = all.where((i) => !i.createdAt.isBefore(_day) && i.createdAt.isBefore(next)).toList();
-          if (list.isEmpty) return const EmptyState(icon: Icons.receipt_long_outlined, message: 'Belum ada struk di hari ini');
+          final list = all.where((i) => !i.createdAt.isBefore(_day) && i.createdAt.isBefore(next)).toList()
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          if (list.isEmpty) {
+            return const EmptyState(icon: Icons.receipt_long_outlined, message: 'Belum ada struk di hari ini');
+          }
           final total = list.where((i) => !i.voided).fold(0, (s, i) => s + i.totals.total);
-          return ListView(
-            children: [
-              ListTile(
-                title: Text('${list.length} struk'),
-                trailing: Text(formatRupiah(total), style: Theme.of(context).textTheme.titleMedium),
-              ),
-              const Divider(height: 1),
-              for (final inv in list)
-                ListTile(
-                  title: Text('${timeOf(inv.createdAt)} · ${inv.number}'),
-                  subtitle: Text(
-                    '${inv.lines.map((l) => '${l.qty}× ${l.name}').join(', ')}'
-                    '${inv.customerName.isEmpty ? '' : ' · ${inv.customerName}'}',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(formatRupiah(inv.totals.total)),
-                      Text(inv.paymentMethod?.label ?? '', style: Theme.of(context).textTheme.bodySmall),
+          return SectionCard(
+            title: '${list.length} struk',
+            subtitle: 'Total ${formatRupiah(total)}',
+            child: isPhone
+                ? _ReceiptCardList(receipts: list)
+                : AppDataTable(
+                    columns: const ['Nomor struk', 'Pelanggan', 'Waktu', 'Total', 'Pembayaran'],
+                    flex: const [3, 3, 2, 2, 2],
+                    emptyLabel: 'Belum ada struk di hari ini.',
+                    onTap: (i) => context.go('/cafe/receipts/${list[i].id}'),
+                    rows: [
+                      for (final inv in list)
+                        [
+                          Text(inv.number, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          Text(
+                            inv.customerName.isEmpty ? 'Pelanggan umum' : inv.customerName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(timeOf(inv.createdAt), style: Theme.of(context).textTheme.bodySmall),
+                          Text(formatRupiah(inv.totals.total), style: const TextStyle(fontWeight: FontWeight.w600)),
+                          Align(alignment: Alignment.centerLeft, child: _paymentBadge(inv)),
+                        ],
                     ],
                   ),
-                  onTap: () => context.go('/cafe/receipts/${inv.id}'),
-                ),
-            ],
           );
         },
       ),
+    );
+  }
+}
+
+StatusBadge _paymentBadge(Invoice invoice) => invoice.voided
+    ? const StatusBadge('Dibatalkan', tone: BadgeTone.danger)
+    : const StatusBadge('Lunas', tone: BadgeTone.success, icon: Icons.check_circle_outline);
+
+/// Daftar struk berbentuk kartu untuk layar HP.
+class _ReceiptCardList extends StatelessWidget {
+  const _ReceiptCardList({required this.receipts});
+
+  final List<Invoice> receipts;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (final inv in receipts)
+          InkWell(
+            onTap: () => context.go('/cafe/receipts/${inv.id}'),
+            borderRadius: BorderRadius.circular(AppRadius.control),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                spacing: AppSpacing.md,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          inv.number,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          '${timeOf(inv.createdAt)} · ${inv.customerName.isEmpty ? 'Pelanggan umum' : inv.customerName}',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(formatRupiah(inv.totals.total), style: Theme.of(context).textTheme.bodyMedium),
+                  _paymentBadge(inv),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -112,6 +179,7 @@ class CafeReceiptView extends ConsumerWidget {
     final store = ref.watch(cafeReceiptStoreProvider).value ?? const StoreSettings();
     final busy = ref.watch(receiptPrintViewModelProvider).isLoading;
     return Scaffold(
+      backgroundColor: context.tokens.canvas,
       appBar: AppBar(
         title: const Text('Struk'),
         leading: BackButton(onPressed: () => context.go('/cafe/receipts')),
@@ -136,7 +204,7 @@ class CafeReceiptView extends ConsumerWidget {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 child: FilledButton.icon(
                   onPressed: busy
                       ? null

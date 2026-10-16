@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/money.dart';
 import '../../../../core/utils/product_image.dart';
+import '../../../../core/widgets/app_layout.dart';
+import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../../core/widgets/product_image_view.dart';
 import '../../domain/entities/product.dart';
@@ -32,12 +34,19 @@ class ProductFormView extends ConsumerWidget {
     final product = ref.watch(productProvider(id));
     final cost = ref.watch(productCostProvider(id));
     if (product.isLoading || cost.isLoading) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return PageScaffold(
+        leading: BackButton(onPressed: () => context.go('/owner/products')),
+        title: 'Produk',
+        child: const Center(
+          child: Padding(padding: EdgeInsets.all(AppSpacing.xxxl), child: CircularProgressIndicator()),
+        ),
+      );
     }
     if (product.value == null) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: const Center(child: Text('Produk tidak ditemukan')),
+      return PageScaffold(
+        leading: BackButton(onPressed: () => context.go('/owner/products')),
+        title: 'Detail produk',
+        child: const EmptyState(icon: Icons.search_off, message: 'Produk tidak ditemukan'),
       );
     }
     if (product.value!.isBundle) return BundleForm(bundle: product.value);
@@ -178,6 +187,8 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     ref.listen(productFormViewModelProvider, (_, next) {
       if (next.hasError) showMessage(context, '${next.error}', isError: true);
     });
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
     final digits = [FilteringTextInputFormatter.digitsOnly];
 
     Widget field(TextEditingController c, String label, {bool number = false, bool required = false, String? helper}) =>
@@ -189,152 +200,136 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
           validator: required ? (v) => (v ?? '').trim().isEmpty ? 'Wajib diisi' : null : null,
         );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.product == null ? 'Produk baru' : 'Ubah produk'),
-        leading: BackButton(onPressed: () => context.go('/owner/products')),
-      ),
-      body: Form(
+    Widget responsive(List<Widget> children) {
+      if (context.deviceClass == DeviceClass.phone) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: AppSpacing.md,
+          children: children,
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: AppSpacing.md,
+        children: [for (final c in children) Expanded(child: c)],
+      );
+    }
+
+    return PageScaffold(
+      leading: BackButton(onPressed: () => context.go('/owner/products')),
+      title: widget.product?.name ?? 'Produk baru',
+      subtitle: widget.product == null ? 'Produk / Produk baru' : 'Produk / Detail produk',
+      actions: [
+        FilledButton.icon(
+          onPressed: state.isLoading || _processingImage ? null : _save,
+          icon: const Icon(Icons.check, size: 18),
+          label: const Text('Simpan'),
+        ),
+      ],
+      child: Form(
         key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 640),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: 16,
-                  children: [
-                    ProductImageField(
-                      imageBase64: _image,
-                      fallbackIcon: categoryIcon(_category ?? ''),
-                      busy: _processingImage,
-                      onPick: _pickImage,
-                      onRemove: () => setState(() => _image = ''),
-                    ),
-                    field(_name, 'Nama produk', required: true),
-                    Row(
-                      spacing: 12,
-                      children: [
-                        Expanded(child: field(_sku, 'SKU')),
-                        Expanded(child: field(_barcode, 'Barcode')),
-                      ],
-                    ),
-                    Row(
-                      spacing: 12,
-                      children: [
-                        Expanded(
-                          child: _CategoryField(value: _category, onChanged: (v) => setState(() => _category = v)),
+            SectionCard(
+              title: 'Informasi produk',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: AppSpacing.md,
+                children: [
+                  ProductImageField(
+                    imageBase64: _image,
+                    fallbackIcon: categoryIcon(_category ?? ''),
+                    busy: _processingImage,
+                    onPick: _pickImage,
+                    onRemove: () => setState(() => _image = ''),
+                  ),
+                  field(_name, 'Nama produk', required: true),
+                  responsive([field(_sku, 'SKU'), field(_barcode, 'Barcode')]),
+                  responsive([
+                    _CategoryField(value: _category, onChanged: (v) => setState(() => _category = v)),
+                    field(_unit, 'Satuan jual', helper: 'Satuan terkecil, mis. pcs atau kg'),
+                  ]),
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.xs,
+                    children: [
+                      for (final u in Product.unitPresets)
+                        ChoiceChip(
+                          label: Text(u),
+                          selected: _unit.text.trim() == u,
+                          onSelected: (_) => setState(() => _unit.text = u),
                         ),
-                        Expanded(
-                          child: field(
-                            _unit,
-                            'Satuan dasar (jual eceran)',
-                            helper: 'Satuan terkecil, mis. pcs atau kg',
-                          ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            SectionCard(
+              title: 'Harga & inventori',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: AppSpacing.md,
+                children: [
+                  responsive([
+                    field(_buyPrice, 'Harga beli (Rp)', number: true),
+                    field(_sellPrice, 'Harga jual satuan (Rp)', number: true, required: true),
+                  ]),
+                  responsive([
+                    field(_wholesalePrice, 'Harga grosir (Rp)', number: true, helper: 'Kosongkan bila tidak ada'),
+                    field(_wholesaleMin, 'Qty minimal grosir', number: true),
+                  ]),
+                  Text('Isi kemasan', style: theme.textTheme.titleSmall),
+                  Text(
+                    'Selain per $_unitLabel, produk bisa dijual per karton / bal / sak. Isi = berapa $_unitLabel dalam '
+                    'satu kemasan. Pembelian otomatis dipecah ke kemasan terbesar dulu, mis. beli 25 dengan karton '
+                    'isi 20 → 1 karton + 5 $_unitLabel. Kosongkan yang tidak dipakai.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: tokens.muted),
+                  ),
+                  for (final name in ProductPack.presetNames)
+                    if (name != 'pouch' || _showPouch)
+                      responsive([
+                        Text(
+                          name[0].toUpperCase() + name.substring(1),
+                          style: theme.textTheme.titleSmall,
                         ),
-                      ],
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        for (final u in Product.unitPresets)
-                          ChoiceChip(
-                            label: Text(u),
-                            selected: _unit.text.trim() == u,
-                            onSelected: (_) => setState(() => _unit.text = u),
-                          ),
-                      ],
-                    ),
-                    Text('Harga', style: Theme.of(context).textTheme.titleMedium),
-                    Row(
-                      spacing: 12,
-                      children: [
-                        Expanded(child: field(_buyPrice, 'Harga beli (Rp)', number: true)),
-                        Expanded(child: field(_sellPrice, 'Harga jual satuan (Rp)', number: true, required: true)),
-                      ],
-                    ),
-                    Row(
-                      spacing: 12,
-                      children: [
-                        Expanded(
-                          child: field(
-                            _wholesalePrice,
-                            'Harga grosir (Rp)',
-                            number: true,
-                            helper: 'Kosongkan bila tidak ada',
-                          ),
+                        field(
+                          _packContents[name]!,
+                          'Isi per $name ($_unitLabel)',
+                          number: true,
+                          helper: parseRupiah(_packContents[name]!.text) > 1
+                              ? '1 $name = ${parseRupiah(_packContents[name]!.text)} $_unitLabel'
+                              : null,
                         ),
-                        Expanded(child: field(_wholesaleMin, 'Qty minimal grosir', number: true)),
-                      ],
+                        field(_packPrice[name]!, 'Harga per $name (Rp)', number: true),
+                      ]),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Hitung stok'),
+                    subtitle: const Text('Matikan untuk jasa atau barang tanpa stok'),
+                    value: _trackStock,
+                    onChanged: (v) => setState(() => _trackStock = v),
+                  ),
+                  if (_trackStock)
+                    field(
+                      _minStock,
+                      'Stok minimum (order ulang)',
+                      number: true,
+                      helper: 'Peringatan muncul saat stok sama atau di bawah angka ini',
                     ),
-                    Text('Dijual per kemasan', style: Theme.of(context).textTheme.titleMedium),
+                  if (widget.product != null)
                     Text(
-                      'Selain per $_unitLabel, produk bisa dijual per karton / bal / sak. Isi = berapa $_unitLabel dalam '
-                      'satu kemasan. Pembelian otomatis dipecah ke kemasan terbesar dulu, mis. beli 25 dengan karton '
-                      'isi 20 → 1 karton + 5 $_unitLabel. Kosongkan yang tidak dipakai.',
-                      style: Theme.of(context).textTheme.bodySmall,
+                      'Stok saat ini: ${widget.product!.stock} ${widget.product!.unit}. '
+                      'Stok berubah lewat stok masuk, penjualan, atau stock opname.',
+                      style: theme.textTheme.bodySmall?.copyWith(color: tokens.muted),
                     ),
-                    for (final name in ProductPack.presetNames)
-                      if (name != 'pouch' || _showPouch)
-                        Row(
-                          spacing: 12,
-                          children: [
-                            SizedBox(
-                              width: 72,
-                              child: Text(
-                                name[0].toUpperCase() + name.substring(1),
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                            ),
-                            Expanded(
-                              child: field(
-                                _packContents[name]!,
-                                'Isi per $name ($_unitLabel)',
-                                number: true,
-                                helper: parseRupiah(_packContents[name]!.text) > 1
-                                    ? '1 $name = ${parseRupiah(_packContents[name]!.text)} $_unitLabel'
-                                    : null,
-                              ),
-                            ),
-                            Expanded(child: field(_packPrice[name]!, 'Harga per $name (Rp)', number: true)),
-                          ],
-                        ),
-                    Text('Stok', style: Theme.of(context).textTheme.titleMedium),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Hitung stok'),
-                      subtitle: const Text('Matikan untuk jasa atau barang tanpa stok'),
-                      value: _trackStock,
-                      onChanged: (v) => setState(() => _trackStock = v),
-                    ),
-                    if (_trackStock)
-                      field(
-                        _minStock,
-                        'Stok minimum (order ulang)',
-                        number: true,
-                        helper: 'Peringatan muncul saat stok sama atau di bawah angka ini',
-                      ),
-                    if (widget.product != null)
-                      Text(
-                        'Stok saat ini: ${widget.product!.stock} ${widget.product!.unit}. '
-                        'Stok berubah lewat stok masuk, penjualan, atau stock opname.',
-                      ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Aktif dijual'),
-                      value: _active,
-                      onChanged: (v) => setState(() => _active = v),
-                    ),
-                    FilledButton.icon(
-                      onPressed: state.isLoading || _processingImage ? null : _save,
-                      icon: const Icon(Icons.save),
-                      label: const Text('Simpan'),
-                    ),
-                  ],
-                ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Aktif dijual'),
+                    value: _active,
+                    onChanged: (v) => setState(() => _active = v),
+                  ),
+                ],
               ),
             ),
           ],
@@ -367,7 +362,7 @@ class _CategoryField extends ConsumerWidget {
     // Kategori lama yang belum ada di daftar tetap bisa tampil.
     if (value != null && !categories.contains(value)) categories.add(value!);
     return Row(
-      spacing: 4,
+      spacing: AppSpacing.xs,
       children: [
         Expanded(
           child: DropdownButtonFormField<String>(
@@ -409,9 +404,11 @@ class ProductImageField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
     final hasImage = imageBase64.isNotEmpty;
     return Row(
-      spacing: 16,
+      spacing: AppSpacing.lg,
       children: [
         Stack(
           alignment: Alignment.center,
@@ -423,22 +420,22 @@ class ProductImageField extends StatelessWidget {
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: 4,
+            spacing: AppSpacing.xs,
             children: [
-              Text('Foto produk', style: Theme.of(context).textTheme.titleSmall),
+              Text('Foto produk', style: theme.textTheme.titleSmall),
               Text(
                 busy
                     ? 'Memproses foto…'
                     : 'JPG / PNG / WebP. Otomatis diperkecil ke $productImageMaxSide px. '
                           'Tanpa foto, produk memakai gambar default.',
-                style: Theme.of(context).textTheme.bodySmall,
+                style: theme.textTheme.bodySmall?.copyWith(color: tokens.muted),
               ),
               Wrap(
-                spacing: 8,
+                spacing: AppSpacing.sm,
                 children: [
                   OutlinedButton.icon(
                     onPressed: busy ? null : onPick,
-                    icon: const Icon(Icons.add_photo_alternate_outlined),
+                    icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
                     label: Text(hasImage ? 'Ganti foto' : 'Unggah foto'),
                   ),
                   if (hasImage) TextButton(onPressed: busy ? null : onRemove, child: const Text('Hapus')),

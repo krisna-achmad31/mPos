@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../products/domain/entities/product.dart';
 import '../viewmodels/stock_view_models.dart';
@@ -49,25 +50,74 @@ class _StockOpnameDialogState extends ConsumerState<StockOpnameDialog> {
   @override
   Widget build(BuildContext context) {
     final busy = ref.watch(stockActionsViewModelProvider).isLoading;
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
+    final filled = _physical.text.isNotEmpty;
+    final diff = _diff;
+
     return AlertDialog(
-      title: Text('Stock opname · ${widget.product.name}'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 12,
-        children: [
-          Text('Stok sistem: ${widget.product.stock} ${widget.product.unit}'),
-          TextField(
-            controller: _physical,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: const InputDecoration(labelText: 'Stok fisik'),
-            onChanged: (_) => setState(() {}),
+      title: Text('Stok opname · ${widget.product.name}'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: AppSpacing.md,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: AppSpacing.xs,
+                  children: [
+                    InfoRow(label: 'Stok sistem', value: '${widget.product.stock} ${widget.product.unit}'),
+                    if (filled)
+                      InfoRow(
+                        label: 'Selisih',
+                        value: '${diff > 0 ? '+' : ''}$diff ${widget.product.unit}',
+                        valueColor: diff == 0 ? tokens.success : tokens.warning,
+                        bold: true,
+                      ),
+                  ],
+                ),
+                TextField(
+                  controller: _physical,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(labelText: 'Hasil hitung fisik'),
+                  onChanged: (_) => setState(() {}),
+                ),
+                TextField(
+                  controller: _note,
+                  decoration: const InputDecoration(labelText: 'Alasan penyesuaian'),
+                ),
+                if (filled && diff != 0)
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: tokens.warningTint,
+                      borderRadius: BorderRadius.circular(AppRadius.control),
+                    ),
+                    child: Row(
+                      spacing: AppSpacing.sm,
+                      children: [
+                        Icon(Icons.warning_amber_rounded, size: 18, color: tokens.warning),
+                        Expanded(
+                          child: Text(
+                            'Stok akan berubah dari ${widget.product.stock} menjadi ${parseRupiah(_physical.text)} '
+                            '${widget.product.unit}. Penyesuaian dicatat pada riwayat stok.',
+                            style: theme.textTheme.bodySmall?.copyWith(color: tokens.warning),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
           ),
-          if (_physical.text.isNotEmpty) Text('Selisih: ${_diff > 0 ? '+' : ''}$_diff'),
-          TextField(controller: _note, decoration: const InputDecoration(labelText: 'Keterangan')),
-        ],
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),

@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/router/app_shell.dart';
 import '../../../../core/utils/dates.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/async_value_view.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../auth/auth_providers.dart';
@@ -15,7 +15,7 @@ import '../../data/demo_report_repository.dart';
 import '../../domain/demo_invoice_editor.dart';
 import '../../domain/sales_report.dart';
 import '../viewmodels/report_view_model.dart';
-import '../widgets/report_widgets.dart';
+import '../widgets/report_widgets.dart' show TimeBarChart, ProportionList, DonutChart, dayLabel, hourLabel, timeOf;
 import '../../../sales/presentation/widgets/line_text.dart';
 
 class ReportsView extends ConsumerWidget {
@@ -24,23 +24,21 @@ class ReportsView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final filter = ref.watch(reportFilterProvider);
-    return Scaffold(
-      appBar: AppBar(
-        leading: shellMenuButton(context),
-        title: const Text('Laporan'),
-        actions: const [_ExportButton(), SizedBox(width: 8)],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          const _FilterBar(),
-          if (filter.mode == ReportMode.demo) const _DemoBanner(),
-          const SizedBox(height: 8),
-          AsyncValueView(
-            value: ref.watch(salesReportProvider),
-            data: (report) => _ReportBody(report: report, period: filter.period),
-          ),
-        ],
+    return PageScaffold(
+      title: 'Laporan',
+      subtitle: 'Ringkasan penjualan, laba, dan transaksi per periode.',
+      actions: const [_FilterBar()],
+      appBarActions: const [_ExportButton()],
+      scrollable: false,
+      child: AsyncValueView(
+        value: ref.watch(salesReportProvider),
+        data: (report) => ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            if (filter.mode == ReportMode.demo) const _DemoBanner(),
+            _ReportBody(report: report, period: filter.period),
+          ],
+        ),
       ),
     );
   }
@@ -366,9 +364,7 @@ class _ReportBody extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
+        KpiRow(
           children: [
             KpiTile(label: 'Omzet bersih', value: formatRupiah(r.netSales), icon: Icons.payments_outlined),
             KpiTile(label: 'Jumlah nota', value: '${r.invoiceCount}', icon: Icons.receipt_long_outlined),

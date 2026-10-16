@@ -7,9 +7,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/money.dart';
 import '../../../../core/utils/product_image.dart';
+import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../../core/widgets/product_picker.dart';
 import '../../../../core/widgets/quantity_dialog.dart';
+import '../../../../core/widgets/status_badge.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/services/bundle_rules.dart';
 import '../../domain/services/inventory_summary.dart';
@@ -139,8 +141,8 @@ class _BundleFormState extends ConsumerState<BundleForm> {
     ref.listen(productFormViewModelProvider, (_, next) {
       if (next.hasError) showMessage(context, '${next.error}', isError: true);
     });
-    final text = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
     final products = {for (final p in ref.watch(productsProvider).value ?? const <Product>[]) p.id: p};
     final costs = ref.watch(productUnitCostsProvider);
 
@@ -154,107 +156,133 @@ class _BundleFormState extends ConsumerState<BundleForm> {
       Product(id: '_preview', name: '', sellPrice: price, bundleItems: items),
     ]).last;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.bundle == null ? 'Bundling baru' : 'Ubah bundling'),
-        leading: BackButton(onPressed: () => context.go('/owner/products')),
-      ),
-      body: Form(
+    Widget responsive(List<Widget> children) {
+      if (context.deviceClass == DeviceClass.phone) {
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: AppSpacing.md, children: children);
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: AppSpacing.md,
+        children: [for (final c in children) Expanded(child: c)],
+      );
+    }
+
+    return PageScaffold(
+      leading: BackButton(onPressed: () => context.go('/owner/products')),
+      title: widget.bundle == null ? 'Bundling baru' : 'Ubah bundling',
+      subtitle: 'Produk / Bundle',
+      actions: [
+        FilledButton.icon(
+          onPressed: state.isLoading || _processingImage ? null : () => _save(products, costs),
+          icon: const Icon(Icons.check, size: 18),
+          label: const Text('Simpan paket'),
+        ),
+      ],
+      child: Form(
         key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 640),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: 16,
-                  children: [
-                    ProductImageField(
-                      imageBase64: _image,
-                      fallbackIcon: Icons.redeem_outlined,
-                      busy: _processingImage,
-                      onPick: _pickImage,
-                      onRemove: () => setState(() => _image = ''),
-                    ),
-                    TextFormField(
-                      controller: _name,
-                      decoration: const InputDecoration(labelText: 'Nama bundling', hintText: 'mis. Paket Hemat Kopi Susu'),
-                      validator: (v) => (v ?? '').trim().isEmpty ? 'Wajib diisi' : null,
-                    ),
-                    Row(spacing: 12, children: [
-                      Expanded(child: TextFormField(controller: _sku, decoration: const InputDecoration(labelText: 'SKU'))),
-                      Expanded(
-                        child: TextFormField(controller: _barcode, decoration: const InputDecoration(labelText: 'Barcode')),
-                      ),
-                    ]),
-                    Text('Isi bundling', style: text.titleMedium),
-                    Text(
-                      'Pilih produk, jumlah, dan harga per satuan di dalam paket. Harga paket = jumlah harga semua isi. '
-                      'Saat paket terjual, stok tiap produk isi ikut berkurang.',
-                      style: text.bodySmall,
-                    ),
-                    ProductPicker(
-                      key: ValueKey(_pickerKey),
-                      label: 'Tambah produk ke bundling',
-                      includeBundles: false,
-                      onSelected: _add,
-                    ),
-                    if (items.isEmpty)
-                      Text('Belum ada isi.', style: text.bodyMedium?.copyWith(color: scheme.outline))
-                    else
-                      Card(
-                        margin: EdgeInsets.zero,
-                        child: Column(
-                          children: [
-                            for (var i = 0; i < items.length; i++) ...[
-                              if (i > 0) const Divider(height: 1),
-                              _ItemRow(
-                                key: ValueKey(items[i].productId),
-                                item: items[i],
-                                product: products[items[i].productId],
-                                onQty: (q) => _setQty(i, q),
-                                onPrice: (v) => _setPrice(i, v),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    if (items.isNotEmpty)
-                      _Summary(
-                        rows: [
-                          ('Harga normal isi', formatRupiah(normal), null),
-                          ('Harga bundling (jumlah harga isi)', price > 0 ? formatRupiah(price) : '-', null),
-                          if (price > 0 && saving > 0)
-                            ('Pelanggan hemat', '${formatRupiah(saving)} (${(saving * 100 / normal).round()}%)', scheme.primary),
-                          if (price > 0 && saving < 0)
-                            ('Lebih mahal dari harga normal', formatRupiah(-saving), scheme.error),
-                          ('Modal (HPP isi)', formatRupiah(cost), null),
-                          if (price > 0)
-                            ('Laba per paket', formatRupiah(price - cost), price < cost ? scheme.error : null),
-                          ('Stok paket tersedia', preview.trackStock ? '${preview.stock} paket' : 'tanpa batas stok', null),
+            SectionCard(
+              title: 'Informasi paket',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: AppSpacing.md,
+                children: [
+                  ProductImageField(
+                    imageBase64: _image,
+                    fallbackIcon: Icons.redeem_outlined,
+                    busy: _processingImage,
+                    onPick: _pickImage,
+                    onRemove: () => setState(() => _image = ''),
+                  ),
+                  TextFormField(
+                    controller: _name,
+                    decoration: const InputDecoration(labelText: 'Nama bundling', hintText: 'mis. Paket Hemat Kopi Susu'),
+                    validator: (v) => (v ?? '').trim().isEmpty ? 'Wajib diisi' : null,
+                  ),
+                  responsive([
+                    TextFormField(controller: _sku, decoration: const InputDecoration(labelText: 'SKU')),
+                    TextFormField(controller: _barcode, decoration: const InputDecoration(labelText: 'Barcode')),
+                  ]),
+                ],
+              ),
+            ),
+            SectionCard(
+              title: 'Isi paket',
+              subtitle:
+                  'Pilih produk, jumlah, dan harga per satuan di dalam paket. Saat paket terjual, stok tiap produk isi ikut berkurang.',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: AppSpacing.md,
+                children: [
+                  ProductPicker(
+                    key: ValueKey(_pickerKey),
+                    label: 'Tambah produk ke bundling',
+                    includeBundles: false,
+                    onSelected: _add,
+                  ),
+                  if (items.isEmpty)
+                    Text('Belum ada isi.', style: theme.textTheme.bodyMedium?.copyWith(color: tokens.muted))
+                  else
+                    Column(
+                      children: [
+                        for (var i = 0; i < items.length; i++) ...[
+                          if (i > 0) Divider(height: 1, color: tokens.line),
+                          _ItemRow(
+                            key: ValueKey(items[i].productId),
+                            item: items[i],
+                            product: products[items[i].productId],
+                            onQty: (q) => _setQty(i, q),
+                            onPrice: (v) => _setPrice(i, v),
+                          ),
                         ],
-                      ),
-                    if (price > 0 && price < cost)
-                      Text(
-                        'Harga bundling di bawah modal: setiap paket terjual rugi.',
-                        style: text.bodyMedium?.copyWith(color: scheme.error),
-                      ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text('Aktif — tampil di katalog pelanggan'),
-                      subtitle: const Text('Matikan untuk menyembunyikan paket dari katalog & kasir tanpa menghapusnya'),
-                      value: _active,
-                      onChanged: (v) => setState(() => _active = v),
+                      ],
                     ),
-                    FilledButton.icon(
-                      onPressed: state.isLoading || _processingImage ? null : () => _save(products, costs),
-                      icon: const Icon(Icons.save),
-                      label: const Text('Simpan bundling'),
+                  if (items.isNotEmpty)
+                    _Summary(
+                      rows: [
+                        ('Harga normal isi', formatRupiah(normal), null),
+                        ('Harga bundling (jumlah harga isi)', price > 0 ? formatRupiah(price) : '-', null),
+                        if (price > 0 && saving > 0)
+                          (
+                            'Pelanggan hemat',
+                            '${formatRupiah(saving)} (${(saving * 100 / normal).round()}%)',
+                            theme.colorScheme.primary,
+                          ),
+                        if (price > 0 && saving < 0)
+                          ('Lebih mahal dari harga normal', formatRupiah(-saving), tokens.danger),
+                        ('Modal (HPP isi)', formatRupiah(cost), null),
+                        if (price > 0)
+                          ('Laba per paket', formatRupiah(price - cost), price < cost ? tokens.danger : null),
+                      ],
                     ),
-                  ],
-                ),
+                  if (preview.trackStock)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: StatusBadge(
+                        'Maksimal ${preview.stock} paket tersedia',
+                        tone: BadgeTone.warning,
+                        icon: Icons.inventory_2_outlined,
+                      ),
+                    ),
+                  Text(
+                    'Stok komponen berkurang otomatis saat paket terjual.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: tokens.muted),
+                  ),
+                  if (price > 0 && price < cost)
+                    Text(
+                      'Harga bundling di bawah modal: setiap paket terjual rugi.',
+                      style: theme.textTheme.bodyMedium?.copyWith(color: tokens.danger),
+                    ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Aktif — tampil di katalog pelanggan'),
+                    subtitle: const Text('Matikan untuk menyembunyikan paket dari katalog & kasir tanpa menghapusnya'),
+                    value: _active,
+                    onChanged: (v) => setState(() => _active = v),
+                  ),
+                ],
               ),
             ),
           ],
@@ -271,24 +299,11 @@ class _Summary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          spacing: 8,
-          children: [
-            for (final (label, value, color) in rows)
-              Row(
-                children: [
-                  Expanded(child: Text(label, style: text.bodyMedium?.copyWith(color: color))),
-                  Text(value, style: text.titleSmall?.copyWith(color: color)),
-                ],
-              ),
-          ],
-        ),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final (label, value, color) in rows) InfoRow(label: label, value: value, valueColor: color, bold: true),
+      ],
     );
   }
 }
@@ -319,21 +334,23 @@ class _ItemRowState extends State<_ItemRow> {
   Widget build(BuildContext context) {
     final item = widget.item;
     final p = widget.product;
-    final text = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final text = theme.textTheme;
+    final tokens = context.tokens;
     final diff = item.price - item.bundlePrice;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: 8,
+        spacing: AppSpacing.sm,
         children: [
           Row(
             children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 2,
                   children: [
                     Text(item.name, style: text.titleSmall),
                     Text(
@@ -342,7 +359,7 @@ class _ItemRowState extends State<_ItemRow> {
                         if (p != null && p.trackStock) 'stok ${p.stock}',
                         if (p == null) 'produk tidak ditemukan',
                       ].join(' · '),
-                      style: text.bodySmall?.copyWith(color: p == null ? scheme.error : null),
+                      style: text.bodySmall?.copyWith(color: p == null ? tokens.danger : tokens.muted),
                     ),
                   ],
                 ),
@@ -366,13 +383,13 @@ class _ItemRowState extends State<_ItemRow> {
               ),
               IconButton(
                 tooltip: 'Hapus',
-                icon: Icon(Icons.delete_outline, color: scheme.error),
+                icon: Icon(Icons.delete_outline, color: tokens.danger),
                 onPressed: () => widget.onQty(0),
               ),
             ],
           ),
           Row(
-            spacing: 12,
+            spacing: AppSpacing.md,
             children: [
               Expanded(
                 child: TextFormField(
@@ -393,11 +410,8 @@ class _ItemRowState extends State<_ItemRow> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.only(right: 8, bottom: 18),
-                child: Text(
-                  '${item.qty} × = ${formatRupiah(item.bundleTotal)}',
-                  style: text.titleSmall,
-                ),
+                padding: const EdgeInsets.only(right: AppSpacing.sm, bottom: 18),
+                child: Text('${item.qty} × = ${formatRupiah(item.bundleTotal)}', style: text.titleSmall),
               ),
             ],
           ),

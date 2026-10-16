@@ -97,6 +97,45 @@ flutter test               # unit test logika bisnis & guard role
 flutter analyze
 ```
 
+## Design system & tata letak responsif
+
+Seluruh tampilan mengikuti file desain `design_ui.pen` (pen.dev) dengan satu sumber token:
+
+| Berkas | Isi |
+| --- | --- |
+| `lib/core/theme/app_tokens.dart` | `AppPalette` (primary `#245FE5`, ink `#17243B`, muted `#69758A`, canvas `#F5F7FB`, line `#E5EAF2`, success `#147D61`, warning `#996310`, danger `#BC3F50` + tint), `AppRadius`, `AppSpacing`, `Breakpoints`, `DeviceClass`, `context.tokens`, `context.deviceClass` |
+| `lib/core/theme/app_theme.dart` | ColorScheme eksplisit, text theme, dan tema komponen (Card, Input, Button, Nav, Dialog, Snackbar) |
+| `lib/core/widgets/app_layout.dart` | `PageScaffold` (app bar jejak lokasi + page heading), `SectionCard`, `KpiTile`/`KpiRow`, `InfoRow`, `AppDataTable` |
+| `lib/core/widgets/status_badge.dart` | `StatusBadge` + `BadgeTone` (neutral/info/success/warning/danger) |
+| `lib/core/widgets/app_timeline.dart` | `AppTimeline` untuk langkah pesanan/resep |
+| `lib/features/sales/presentation/widgets/sales_badges.dart` | Lencana status pesanan, pembayaran, dan tempo |
+
+Titik henti tata letak (`Breakpoints`):
+
+| Lebar | Navigasi | Konten |
+| --- | --- | --- |
+| `< 600` (HP) | bottom navigation (4 tab + `Akun`) | daftar kartu, bukan tabel |
+| `600–999` (tablet) | rel ikon 76 px | tabel & grid rapat |
+| `>= 1000` (web) | sidebar 224 px + bagian menu | konten maks 1240 px di tengah |
+
+Catatan font: desain memakai **Inter**. `AppTheme` sudah menulis `fontFamily: 'Inter'` dengan fallback
+(`Roboto`, `Segoe UI`, …), tetapi berkas fontnya belum dibundel. Agar sama persis dengan desain, tambahkan
+aset Inter lalu daftarkan di `pubspec.yaml`:
+
+```yaml
+flutter:
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+```
+
 ## Belum dikerjakan (sesuai PRD, tahap berikutnya)
 
 - Cetak ke printer thermal 58/80 mm, PDF invoice/faktur, dan bagikan WhatsApp (data jenis nota sudah ada di Pengaturan).

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/theme/app_tokens.dart';
 import '../../../../core/utils/dates.dart';
 import '../../../auth/auth_providers.dart';
 import '../../../products/product_providers.dart';
@@ -89,13 +90,21 @@ class _DiscountFormDialogState extends ConsumerState<DiscountFormDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
     final products = ref.watch(activeProductsProvider).value ?? [];
     final customers = ref.watch(customersProvider).value ?? [];
     final isPromo = _kind == DiscountKind.promo;
     final canShowInCatalog = isPromo;
 
     return AlertDialog(
-      title: Text(widget.initial == null ? 'Diskon baru' : 'Ubah diskon'),
+      title: Row(
+        spacing: AppSpacing.sm,
+        children: [
+          Icon(Icons.local_offer_outlined, size: 20, color: theme.colorScheme.primary),
+          Flexible(child: Text(widget.initial == null ? 'Diskon baru' : 'Ubah diskon')),
+        ],
+      ),
       content: SizedBox(
         width: 460,
         child: SingleChildScrollView(
@@ -210,7 +219,7 @@ class _DiscountFormDialogState extends ConsumerState<DiscountFormDialog> {
                   value: _visible,
                   onChanged: (v) => setState(() => _visible = v),
                 ),
-              if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              if (_error != null) Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: tokens.danger)),
             ],
           ),
         ),
