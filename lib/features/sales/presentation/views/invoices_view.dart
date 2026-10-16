@@ -4,15 +4,16 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/dates.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/async_value_view.dart';
 import '../../../../core/widgets/empty_state.dart';
+import '../../../../core/widgets/status_badge.dart';
 import '../../../auth/auth_providers.dart';
 import '../../domain/entities/invoice.dart';
 import '../../domain/services/sale_calculator.dart';
 import '../../sales_providers.dart';
 import '../viewmodels/report_view_model.dart';
 import '../widgets/month_switcher.dart';
-import '../../../../core/router/app_shell.dart';
 
 /// Filter riwayat nota.
 enum InvoiceFilter {
@@ -58,13 +59,14 @@ class _InvoicesViewState extends ConsumerState<InvoicesView> {
     final invoices = user.isOwner ? ref.watch(invoicesInMonthProvider(month)) : ref.watch(myInvoicesProvider);
     final base = user.isOwner ? '/owner' : '/shop';
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: shellMenuButton(context),
-        title: const Text('Riwayat Nota'),
-        actions: [if (user.isOwner) const MonthSwitcher(), const SizedBox(width: 12)],
-      ),
-      body: AsyncValueView(
+    return PageScaffold(
+      title: 'Riwayat nota',
+      subtitle: user.isOwner
+          ? 'Pantau transaksi, pembayaran, dan jatuh tempo.'
+          : 'Semua nota belanjamu tersimpan di sini.',
+      appBarActions: user.isOwner ? const [MonthSwitcher()] : const [],
+      scrollable: false,
+      child: AsyncValueView(
         value: invoices,
         data: (all) {
           final list = all.where(_filter.matches).toList();
@@ -75,9 +77,8 @@ class _InvoicesViewState extends ConsumerState<InvoicesView> {
           final now = DateTime.now();
           final chips = SingleChildScrollView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
             child: Row(
-              spacing: 8,
+              spacing: AppSpacing.sm,
               children: [
                 for (final f in InvoiceFilter.values)
                   ChoiceChip(
@@ -88,49 +89,20 @@ class _InvoicesViewState extends ConsumerState<InvoicesView> {
               ],
             ),
           );
-          if (list.isEmpty) {
-            return Column(
-              children: [
-                chips,
-                const Expanded(
-                  child: EmptyState(icon: Icons.receipt_long_outlined, message: 'Belum ada nota'),
-                ),
-              ],
-            );
-          }
+
           return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               chips,
+              const SizedBox(height: AppSpacing.md),
               Expanded(
-                child: ListView.separated(
-                  itemCount: list.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, i) {
-                    final inv = list[i];
-                    return ListTile(
-                      title: Text('${inv.number} · ${inv.customerName}'),
-                      subtitle: Text(
-                        '${formatDateTime(inv.createdAt)} · ${inv.source == InvoiceSource.pos ? 'Kasir' : 'Online'}',
-                      ),
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(formatRupiah(inv.totals.total)),
-                          Text(
-                            _statusLabel(inv, now),
-                            style: TextStyle(
-                              color: inv.voided || inv.paymentStatus != PaymentStatus.paid
-                                  ? Theme.of(context).colorScheme.error
-                                  : null,
-                            ),
-                          ),
-                        ],
-                      ),
-                      onTap: () => context.go('$base/invoices/${inv.id}'),
-                    );
-                  },
-                ),
+                child: list.isEmpty
+                    ? const EmptyState(
+                        icon: Icons.receipt_long_outlined,
+                        title: 'Belum ada nota',
+                        message: 'Tidak ada nota yang cocok dengan filter ini.',
+                      )
+                    : _InvoiceList(list: list, base: base, now: now),
               ),
             ],
           );
@@ -138,15 +110,140 @@ class _InvoicesViewState extends ConsumerState<InvoicesView> {
       ),
     );
   }
+}
 
-  static String _statusLabel(Invoice inv, DateTime now) {
-    if (inv.voided) return 'Batal';
-    if (inv.isOpenCredit) {
-      final due = inv.dueDate;
-      if (due == null) return 'Tempo';
-      return '${inv.isOverdue(now) ? 'Lewat tempo' : 'Tempo'} · ${formatDate(due)}';
+String _statusLabel(Invoice inv, DateTime now) {
+  if (inv.voided) return 'Batal';
+  if (inv.isOpenCredit) {
+    final due = inv.dueDate;
+    if (due == null) return 'Tempo';
+    return '${inv.isOverdue(now) ? 'Lewat tempo' : 'Tempo'} · ${formatDate(due)}';
+  }
+  final method = inv.paymentStatus == PaymentStatus.paid ? inv.paymentMethod?.label : null;
+  return method == null ? inv.paymentStatus.label : '${inv.paymentStatus.label} · $method';
+}
+
+BadgeTone _statusTone(Invoice inv, DateTime now) {
+  if (inv.voided) return BadgeTone.danger;
+  if (inv.isOpenCredit) return inv.isOverdue(now) ? BadgeTone.danger : BadgeTone.warning;
+  return switch (inv.paymentStatus) {
+    PaymentStatus.paid => BadgeTone.success,
+    PaymentStatus.partial => BadgeTone.warning,
+    PaymentStatus.unpaid => BadgeTone.danger,
+  };
+}
+
+StatusBadge _statusBadge(Invoice inv, DateTime now) => StatusBadge(_statusLabel(inv, now), tone: _statusTone(inv, now));
+
+class _InvoiceList extends StatelessWidget {
+  const _InvoiceList({required this.list, required this.base, required this.now});
+
+  final List<Invoice> list;
+  final String base;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    if (context.deviceClass == DeviceClass.phone) {
+      return ListView.separated(
+        itemCount: list.length,
+        padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+        itemBuilder: (context, i) => _InvoiceCard(
+          invoice: list[i],
+          now: now,
+          onTap: () => context.go('$base/invoices/${list[i].id}'),
+        ),
+      );
     }
-    final method = inv.paymentStatus == PaymentStatus.paid ? inv.paymentMethod?.label : null;
-    return method == null ? inv.paymentStatus.label : '${inv.paymentStatus.label} · $method';
+
+    return SingleChildScrollView(
+      child: AppDataTable(
+        columns: const ['Nomor nota', 'Pelanggan', 'Tanggal', 'Total', 'Status'],
+        flex: const [3, 3, 2, 2, 2],
+        onTap: (i) => context.go('$base/invoices/${list[i].id}'),
+        emptyLabel: 'Belum ada nota',
+        rows: [
+          for (final inv in list)
+            [
+              Text(inv.number, style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text(
+                inv.customerName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              Text(formatDate(inv.createdAt), style: Theme.of(context).textTheme.bodySmall),
+              Text(formatRupiah(inv.totals.total), style: const TextStyle(fontWeight: FontWeight.w600)),
+              Align(alignment: Alignment.centerLeft, child: _statusBadge(inv, now)),
+            ],
+        ],
+      ),
+    );
+  }
+}
+
+class _InvoiceCard extends StatelessWidget {
+  const _InvoiceCard({required this.invoice, required this.now, required this.onTap});
+
+  final Invoice invoice;
+  final DateTime now;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(AppRadius.card),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: tokens.line),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+          ),
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: AppSpacing.xs,
+            children: [
+              Row(
+                spacing: AppSpacing.sm,
+                children: [
+                  Expanded(
+                    child: Text(
+                      invoice.number,
+                      style: theme.textTheme.titleSmall?.copyWith(color: tokens.ink),
+                    ),
+                  ),
+                  _statusBadge(invoice, now),
+                ],
+              ),
+              Text(
+                '${invoice.customerName} · ${formatDateTime(invoice.createdAt)} · '
+                '${invoice.source == InvoiceSource.pos ? 'Kasir' : 'Pesanan online'}',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Row(
+                children: [
+                  Text(
+                    formatRupiah(invoice.totals.total),
+                    style: theme.textTheme.titleMedium?.copyWith(color: tokens.ink),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.chevron_right, size: 20, color: tokens.muted),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

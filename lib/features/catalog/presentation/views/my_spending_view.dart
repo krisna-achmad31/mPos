@@ -2,16 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/router/app_shell.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/async_value_view.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../products/presentation/views/product_list_view.dart' show categoryIcon;
-import '../../../reports/presentation/widgets/report_widgets.dart';
+import '../../../reports/presentation/widgets/report_widgets.dart'
+    show DonutChart, ProportionList, TimeBarChart, dayLabel;
 import '../../domain/customer_spending.dart';
 import '../viewmodels/customer_spending_view_model.dart';
 
-/// Customer: apa saja yang sudah dipesan dalam sebulan, berapa nilainya, per kategori.
+/// Pelanggan: apa saja yang sudah dipesan dalam sebulan, berapa nilainya, per kategori
+/// (padanan frame `33 · Pelanggan / Belanja saya`, `75 · Mobile / Belanja saya`).
 class MySpendingView extends ConsumerWidget {
   const MySpendingView({super.key});
 
@@ -19,18 +21,20 @@ class MySpendingView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final month = ref.watch(spendingMonthProvider);
     final vm = ref.read(spendingMonthProvider.notifier);
-    return Scaffold(
-      appBar: AppBar(
-        leading: shellMenuButton(context),
-        title: const Text('Belanja Saya'),
-        actions: [
-          IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => vm.shift(-1)),
-          Text(DateFormat('MMMM yyyy', 'id_ID').format(month)),
-          IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => vm.shift(1)),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: AsyncValueView(
+    return PageScaffold(
+      title: 'Belanja saya',
+      subtitle: 'Ringkasan pembelian Anda dari distributor.',
+      actions: [
+        Row(
+          spacing: AppSpacing.sm,
+          children: [
+            IconButton(onPressed: () => vm.shift(-1), icon: const Icon(Icons.chevron_left)),
+            Text(DateFormat('MMMM yyyy', 'id_ID').format(month), style: Theme.of(context).textTheme.titleSmall),
+            IconButton(onPressed: () => vm.shift(1), icon: const Icon(Icons.chevron_right)),
+          ],
+        ),
+      ],
+      child: AsyncValueView(
         value: ref.watch(customerSpendingProvider),
         data: (s) => s.orderCount == 0
             ? const EmptyState(icon: Icons.shopping_bag_outlined, message: 'Belum ada pesanan di bulan ini')
@@ -49,34 +53,52 @@ class _Body extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = spending;
     final text = Theme.of(context).textTheme;
-    return ListView(
-      padding: const EdgeInsets.all(12),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
+        KpiRow(
           children: [
-            KpiTile(label: 'Total belanja', value: formatRupiah(s.total), icon: Icons.payments_outlined),
-            KpiTile(label: 'Jumlah pesanan', value: '${s.orderCount}', icon: Icons.receipt_long_outlined),
-            KpiTile(label: 'Item dibeli', value: formatNumber(s.itemCount), icon: Icons.inventory_2_outlined),
+            KpiTile(
+              label: 'Total belanja',
+              value: formatRupiah(s.total),
+              hint: '${s.orderCount} pesanan bulan ini',
+              icon: Icons.payments_outlined,
+              highlight: true,
+              width: null,
+            ),
+            KpiTile(
+              label: 'Jumlah pesanan',
+              value: '${s.orderCount}',
+              hint: 'Pesanan pada bulan ini',
+              icon: Icons.receipt_long_outlined,
+              width: null,
+            ),
+            KpiTile(
+              label: 'Item dibeli',
+              value: formatNumber(s.itemCount),
+              hint: 'Total kuantitas',
+              icon: Icons.inventory_2_outlined,
+              width: null,
+            ),
             KpiTile(
               label: 'Kategori',
               value: '${s.byCategory.length}',
               hint: s.byCategory.isEmpty ? null : 'Terbesar: ${s.byCategory.first.name}',
               icon: Icons.category_outlined,
+              width: null,
             ),
           ],
         ),
         if (s.pendingCount > 0)
           Padding(
-            padding: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.only(top: AppSpacing.sm),
             child: Text(
               '${s.pendingCount} pesanan belum diproses: nilainya masih harga katalog, '
               'nilai final (termasuk diskon) mengikuti invoice.',
               style: text.bodySmall,
             ),
           ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.xl),
         LayoutBuilder(builder: (context, c) {
           final donut = SectionCard(title: 'Belanja per kategori', child: DonutChart(items: s.byCategory));
           final bars = SectionCard(
@@ -85,7 +107,7 @@ class _Body extends StatelessWidget {
             child: ProportionList(items: s.byCategory),
           );
           return c.maxWidth >= 900
-              ? Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 12, children: [
+              ? Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: AppSpacing.md, children: [
                   Expanded(child: donut),
                   Expanded(child: bars),
                 ])

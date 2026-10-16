@@ -5,16 +5,21 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/dates.dart';
 import '../../../../core/utils/money.dart';
+import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/async_value_view.dart';
+import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
+import '../../../../core/widgets/status_badge.dart';
 import '../../../auth/auth_providers.dart';
 import '../../../settings/settings_providers.dart';
+import '../../domain/entities/cart_line.dart';
 import '../../domain/entities/invoice.dart';
 import '../../domain/services/sale_calculator.dart';
 import '../../sales_providers.dart';
 import '../viewmodels/order_view_models.dart';
-import '../widgets/totals_table.dart';
 import '../widgets/line_text.dart';
+import '../widgets/sales_badges.dart';
+import '../widgets/totals_table.dart';
 import 'invoice_print_view.dart';
 
 /// Nota / invoice. Dipakai Owner dan Customer.
@@ -26,35 +31,31 @@ class InvoiceView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final base = ref.watch(currentUserProvider).isOwner ? '/owner' : '/shop';
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Invoice'),
-        leading: BackButton(onPressed: () => context.go('$base/invoices')),
-        actions: [
-          if (ref.watch(invoiceProvider(invoiceId)).value case final invoice?)
-            TextButton.icon(
-              icon: const Icon(Icons.picture_as_pdf_outlined),
-              label: const Text('Cetak / PDF'),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => InvoicePrintView(invoice: invoice)),
-              ),
+    final invoiceAsync = ref.watch(invoiceProvider(invoiceId));
+    final invoice = invoiceAsync.value;
+    return PageScaffold(
+      leading: BackButton(onPressed: () => context.go('$base/invoices')),
+      title: invoice == null ? 'Nota' : 'Nota ${invoice.number}',
+      breadcrumb: '/  Riwayat nota / Detail',
+      actions: [
+        if (invoice != null)
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => InvoicePrintView(invoice: invoice)),
             ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: AsyncValueView(
-        value: ref.watch(invoiceProvider(invoiceId)),
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            label: const Text('Cetak / PDF'),
+          ),
+      ],
+      child: AsyncValueView(
+        value: invoiceAsync,
         data: (invoice) => invoice == null
-            ? const Center(child: Text('Invoice tidak ditemukan'))
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 640),
-                    child: _InvoiceBody(invoice: invoice),
-                  ),
-                ),
-              ),
+            ? const EmptyState(
+                icon: Icons.receipt_long_outlined,
+                title: 'Nota tidak ditemukan',
+                message: 'Nota mungkin sudah dihapus atau tautannya salah.',
+              )
+            : _InvoiceBody(invoice: invoice),
       ),
     );
   }
@@ -104,100 +105,194 @@ class _InvoiceBody extends ConsumerWidget {
     final settings = ref.watch(storeSettingsProvider).value;
     final payments = ref.watch(paymentsProvider(invoice.id)).value ?? const <PaymentRecord>[];
     final text = Theme.of(context).textTheme;
+    final tokens = context.tokens;
+    final isPhone = context.deviceClass == DeviceClass.phone;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: 6,
-          children: [
-            if (settings != null) ...[
-              Text(settings.storeName, style: text.titleLarge),
-              if (settings.address.isNotEmpty) Text(settings.address),
-              if (settings.phone.isNotEmpty) Text(settings.phone),
-              const Divider(),
+    final paper = SectionCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: AppSpacing.sm,
+        children: [
+          if (settings != null) ...[
+            Text(settings.storeName, style: text.titleMedium?.copyWith(color: tokens.ink)),
+            if (settings.address.isNotEmpty) Text(settings.address, style: text.bodySmall),
+            if (settings.phone.isNotEmpty) Text(settings.phone, style: text.bodySmall),
+            const Divider(height: AppSpacing.xl),
+          ],
+          Row(
+            spacing: AppSpacing.md,
+            children: [
+              Expanded(child: Text(invoice.number, style: text.titleMedium?.copyWith(color: tokens.ink))),
+              StatusBadge(
+                invoice.voided ? 'Batal' : invoice.paymentStatus.label,
+                tone: invoice.voided ? BadgeTone.danger : toneForPayment(invoice.paymentStatus),
+              ),
             ],
-            Row(
-              children: [
-                Expanded(child: Text(invoice.number, style: text.titleMedium)),
-                Chip(label: Text(invoice.voided ? 'Batal' : invoice.paymentStatus.label)),
+          ),
+          Text(
+            '${formatDateTime(invoice.createdAt)} · ${invoice.source == InvoiceSource.pos ? 'Kasir' : 'Pesanan online'}',
+            style: text.bodySmall,
+          ),
+          Text('Pelanggan: ${invoice.customerName}', style: text.bodyMedium),
+          if (invoice.salesName.isNotEmpty) Text('Sales: ${invoice.salesName}', style: text.bodySmall),
+          if (invoice.isOpenCredit)
+            _CreditBanner(
+              invoice: invoice,
+              onSettle: user.isOwner ? () => _addPayment(context, ref, settleAll: true) : null,
+            )
+          else if (invoice.dueDate != null && !invoice.voided)
+            Text('Tempo s/d ${formatDate(invoice.dueDate!)} · sudah lunas', style: text.bodySmall),
+          if (invoice.orderId case final orderId?)
+            _ShippingStatus(orderId: orderId, base: user.isOwner ? '/owner' : '/shop'),
+          const Divider(height: AppSpacing.xl),
+          if (isPhone)
+            for (final line in invoice.lines) _InvoiceLineRow(line: line)
+          else
+            AppDataTable(
+              columns: const ['Produk', 'Qty', 'Harga', 'Jumlah'],
+              flex: const [4, 2, 2, 2],
+              emptyLabel: 'Belum ada produk',
+              rows: [
+                for (final line in invoice.lines)
+                  [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      spacing: 2,
+                      children: [
+                        Text(line.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                        Text(
+                          [
+                            lineDetail(line),
+                            if (line.discountAmount > 0) '${line.discountLabel} −${formatRupiah(line.discountAmount)}',
+                          ].join(' · '),
+                          style: text.bodySmall,
+                        ),
+                      ],
+                    ),
+                    Text('${line.qty} ${line.unit}'),
+                    Text(formatRupiah(line.unitPrice)),
+                    Text(formatRupiah(line.net), style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ],
               ],
             ),
-            Text('${formatDateTime(invoice.createdAt)} · ${invoice.source == InvoiceSource.pos ? 'Kasir' : 'Pesanan online'}'),
-            Text('Pelanggan: ${invoice.customerName}'),
-            if (invoice.salesName.isNotEmpty) Text('Sales: ${invoice.salesName}'),
-            if (invoice.isOpenCredit)
-              _CreditBanner(
-                invoice: invoice,
-                onSettle: user.isOwner ? () => _addPayment(context, ref, settleAll: true) : null,
-              )
-            else if (invoice.dueDate != null && !invoice.voided)
-              Text('Tempo s/d ${formatDate(invoice.dueDate!)} · sudah lunas', style: text.bodySmall),
-            if (invoice.orderId case final orderId?) _ShippingStatus(orderId: orderId, base: user.isOwner ? '/owner' : '/shop'),
-            const Divider(),
-            for (final line in invoice.lines) ...[
-              Row(
-                children: [
-                  Expanded(child: Text(line.name)),
-                  Text(formatRupiah(line.gross)),
-                ],
-              ),
-              Text(lineDetail(line), style: text.bodySmall),
-              if (line.discountAmount > 0)
-                Row(
-                  children: [
-                    Expanded(child: Text('  ${line.discountLabel}', style: text.bodySmall)),
-                    Text('−${formatRupiah(line.discountAmount)}', style: text.bodySmall),
-                  ],
-                ),
-            ],
-            const Divider(),
-            TotalsTable(totals: invoice.totals),
-            const SizedBox(height: 8),
-            _row('Dibayar', formatRupiah(invoice.paid)),
-            if (invoice.change > 0) _row('Kembalian', formatRupiah(invoice.change)),
-            if (invoice.remaining > 0) _row('Sisa tagihan', formatRupiah(invoice.remaining)),
-            if (payments.isNotEmpty) ...[
-              const Divider(),
-              Text('Riwayat pembayaran', style: text.titleSmall),
-              for (final p in payments)
-                _row(
-                  '${formatDateTime(p.at)} · ${p.isReversal ? 'Dibatalkan (${p.method.label} → tempo)' : p.method.label}',
-                  formatRupiah(p.amount),
-                ),
-            ],
-            if (settings != null && settings.bankInfo.isNotEmpty && invoice.remaining > 0) ...[
-              const Divider(),
-              Text('Pembayaran ke:\n${settings.bankInfo}'),
-            ],
-            if (settings != null && settings.invoiceFooter.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(settings.invoiceFooter, textAlign: TextAlign.center, style: text.bodySmall),
-            ],
-            if (user.isOwner && invoice.remaining > 0 && !invoice.voided) ...[
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: () => _addPayment(context, ref),
-                icon: const Icon(Icons.payments_outlined),
-                label: const Text('Catat pelunasan'),
-              ),
-            ],
-            if (user.isOwner && invoice.remaining <= 0 && !invoice.voided) ...[
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => _convertToCredit(context, ref),
-                icon: const Icon(Icons.schedule),
-                label: const Text('Ubah ke tempo'),
-              ),
-            ],
+          const SizedBox(height: AppSpacing.md),
+          TotalsTable(totals: invoice.totals),
+          if (settings != null && settings.invoiceFooter.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(settings.invoiceFooter, textAlign: TextAlign.center, style: text.bodySmall),
           ],
-        ),
+        ],
+      ),
+    );
+
+    final payment = SectionCard(
+      title: 'Pembayaran',
+      trailing: StatusBadge(
+        invoice.voided ? 'Batal' : invoice.paymentStatus.label,
+        tone: invoice.voided ? BadgeTone.danger : toneForPayment(invoice.paymentStatus),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          KpiRow(
+            children: [
+              KpiTile(
+                label: invoice.remaining > 0 ? 'Sisa tagihan' : 'Total nota',
+                value: formatRupiah(invoice.remaining > 0 ? invoice.remaining : invoice.totals.total),
+                icon: invoice.remaining > 0 ? Icons.account_balance_wallet_outlined : Icons.receipt_long_outlined,
+                highlight: invoice.remaining > 0,
+                width: null,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          InfoRow(label: 'Dibayar', value: formatRupiah(invoice.paid)),
+          if (invoice.change > 0) InfoRow(label: 'Kembalian', value: formatRupiah(invoice.change)),
+          if (payments.isNotEmpty) ...[
+            const Divider(height: AppSpacing.xl),
+            Text('Riwayat pembayaran', style: text.titleSmall),
+            const SizedBox(height: AppSpacing.sm),
+            for (final p in payments)
+              InfoRow(
+                label:
+                    '${formatDateTime(p.at)} · ${p.isReversal ? 'Dibatalkan (${p.method.label} → tempo)' : p.method.label}',
+                value: formatRupiah(p.amount),
+              ),
+          ],
+          if (settings != null && settings.bankInfo.isNotEmpty && invoice.remaining > 0) ...[
+            const Divider(height: AppSpacing.xl),
+            Text('Pembayaran ke:\n${settings.bankInfo}', style: text.bodySmall),
+          ],
+          if (user.isOwner && invoice.remaining > 0 && !invoice.voided) ...[
+            const SizedBox(height: AppSpacing.lg),
+            FilledButton.icon(
+              onPressed: () => _addPayment(context, ref),
+              icon: const Icon(Icons.payments_outlined),
+              label: const Text('Catat pelunasan'),
+            ),
+          ],
+          if (user.isOwner && invoice.remaining <= 0 && !invoice.voided) ...[
+            const SizedBox(height: AppSpacing.lg),
+            OutlinedButton.icon(
+              onPressed: () => _convertToCredit(context, ref),
+              icon: const Icon(Icons.schedule),
+              label: const Text('Ubah ke tempo'),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (isPhone) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [paper, payment]);
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: AppSpacing.lg,
+      children: [
+        Expanded(flex: 3, child: paper),
+        SizedBox(width: 360, child: payment),
+      ],
+    );
+  }
+}
+
+class _InvoiceLineRow extends StatelessWidget {
+  const _InvoiceLineRow({required this.line});
+
+  final CartLine line;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: AppSpacing.md,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 2,
+              children: [
+                Text(line.name, style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600, color: tokens.ink)),
+                Text(
+                  [
+                    lineDetail(line),
+                    if (line.discountAmount > 0) '${line.discountLabel} −${formatRupiah(line.discountAmount)}',
+                  ].join(' · '),
+                  style: theme.textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          Text(formatRupiah(line.net), style: theme.textTheme.bodyMedium?.copyWith(color: tokens.ink)),
+        ],
       ),
     );
   }
-
-  Widget _row(String label, String value) => Row(children: [Expanded(child: Text(label)), Text(value)]);
 }
 
 class _PaymentInput {
@@ -324,31 +419,29 @@ class _CreditBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
     final due = invoice.dueDate;
     final overdue = invoice.isOverdue(DateTime.now());
-    final fg = overdue ? scheme.onErrorContainer : scheme.onTertiaryContainer;
+    final fg = overdue ? tokens.danger : tokens.warning;
+    final bg = overdue ? tokens.dangerTint : tokens.warningTint;
     return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: overdue ? scheme.errorContainer : scheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(12),
-      ),
+      margin: const EdgeInsets.only(top: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(AppRadius.card)),
       child: Row(
-        spacing: 12,
+        spacing: AppSpacing.sm,
         children: [
-          Icon(overdue ? Icons.warning_amber_rounded : Icons.schedule, color: fg),
+          Icon(overdue ? Icons.warning_amber_rounded : Icons.schedule, size: 18, color: fg),
           Expanded(
             child: Text(
               due == null
                   ? 'Tempo · tanggal jatuh tempo belum diisi'
                   : '${overdue ? 'Lewat jatuh tempo' : 'Tempo'} · bayar paling lambat ${formatDate(due)}',
-              style: TextStyle(color: fg, fontWeight: FontWeight.w600),
+              style: theme.textTheme.bodySmall?.copyWith(color: fg, fontWeight: FontWeight.w600),
             ),
           ),
-          if (onSettle != null)
-            FilledButton(onPressed: onSettle, child: const Text('Tandai sudah dibayar')),
+          if (onSettle != null) FilledButton(onPressed: onSettle, child: const Text('Tandai sudah dibayar')),
         ],
       ),
     );
@@ -366,24 +459,26 @@ class _ShippingStatus extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final order = ref.watch(orderProvider(orderId)).value;
     if (order == null) return const SizedBox.shrink();
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
     return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      margin: const EdgeInsets.only(top: AppSpacing.sm),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.sm, AppSpacing.sm),
       decoration: BoxDecoration(
-        border: Border.all(color: scheme.outlineVariant),
-        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: tokens.line),
+        borderRadius: BorderRadius.circular(AppRadius.card),
       ),
       child: Row(
-        spacing: 12,
+        spacing: AppSpacing.sm,
         children: [
-          const Icon(Icons.local_shipping_outlined),
+          Icon(Icons.local_shipping_outlined, size: 18, color: tokens.muted),
           Expanded(
             child: Text(
               [
                 'Pengiriman: ${order.status.label}',
                 if (order.courierName.isNotEmpty) 'Kurir: ${order.courierName}',
               ].join(' · '),
+              style: theme.textTheme.bodySmall,
             ),
           ),
           TextButton(

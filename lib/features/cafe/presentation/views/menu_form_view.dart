@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/money.dart';
 import '../../../../core/utils/product_image.dart';
+import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/presentation/views/product_form_view.dart' show ProductImageField;
@@ -137,154 +138,152 @@ class _MenuFormViewState extends ConsumerState<MenuFormView> {
       }
     }
 
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
     final ingredients = ref.watch(ingredientsProvider).value ?? const <Ingredient>[];
     final byId = {for (final i in ingredients) i.id: i};
     final cost = CafeRules.menuCost(_recipe, byId);
     final price = parseRupiah(_price.text);
     final busy = ref.watch(cafeActionsViewModelProvider).isLoading;
-    final text = Theme.of(context).textTheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_isNew ? 'Menu baru' : 'Ubah menu'),
-        leading: BackButton(onPressed: () => context.go('/cafe/menu')),
-        actions: [
-          FilledButton(onPressed: busy ? null : _save, child: const Text('Simpan')),
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+    return PageScaffold(
+      title: _isNew ? 'Menu baru' : 'Ubah menu',
+      subtitle: 'Menu & resep / Detail menu',
+      workspace: 'POS Kopi',
+      maxWidth: 900,
+      leading: BackButton(onPressed: () => context.go('/cafe/menu')),
+      actions: [
+        FilledButton.icon(
+          onPressed: busy ? null : _save,
+          icon: const Icon(Icons.check, size: 18),
+          label: const Text('Simpan menu'),
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 640),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                spacing: 16,
-                children: [
-                  ProductImageField(
-                    imageBase64: _image,
-                    fallbackIcon: Icons.local_cafe_outlined,
-                    busy: _processingImage,
-                    onPick: _pickImage,
-                    onRemove: () => setState(() => _image = ''),
+          SectionCard(
+            title: 'Informasi menu',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: AppSpacing.md,
+              children: [
+                ProductImageField(
+                  imageBase64: _image,
+                  fallbackIcon: Icons.local_cafe_outlined,
+                  busy: _processingImage,
+                  onPick: _pickImage,
+                  onRemove: () => setState(() => _image = ''),
+                ),
+                TextField(controller: _name, decoration: const InputDecoration(labelText: 'Nama menu *')),
+                Row(
+                  spacing: AppSpacing.md,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _price,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                        decoration: const InputDecoration(labelText: 'Harga jual (Rp) *'),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    Expanded(
+                      child: TextField(controller: _category, decoration: const InputDecoration(labelText: 'Kategori')),
+                    ),
+                  ],
+                ),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    for (final c in _defaultCategories)
+                      ChoiceChip(
+                        label: Text(c),
+                        selected: _category.text == c,
+                        onSelected: (_) => setState(() => _category.text = c),
+                      ),
+                  ],
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Tampil di kasir'),
+                  value: _active,
+                  onChanged: (v) => setState(() => _active = v),
+                ),
+              ],
+            ),
+          ),
+          SectionCard(
+            title: 'Bahan & takaran',
+            subtitle: ingredients.isEmpty
+                ? 'Belum ada bahan. Bahan otomatis muncul saat pesanan distributor diterima, '
+                    'atau tambahkan manual di Stok bahan.'
+                : 'Setiap porsi terjual memotong stok bahan sesuai takaran ini. Kosongkan bila menu tidak memakai bahan.',
+            trailing: OutlinedButton.icon(
+              onPressed: ingredients.isEmpty ? null : () => setState(() => _rows.add(_RecipeRow())),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Tambah bahan'),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: AppSpacing.sm,
+              children: [
+                if (_rows.isEmpty)
+                  Text(
+                    'Belum ada bahan pada resep menu ini.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: tokens.muted),
                   ),
-                  TextField(controller: _name, decoration: const InputDecoration(labelText: 'Nama menu *')),
+                for (final (index, row) in _rows.indexed)
                   Row(
-                    spacing: 12,
+                    key: ObjectKey(row),
+                    spacing: AppSpacing.sm,
                     children: [
                       Expanded(
+                        flex: 3,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: byId.containsKey(row.ingredientId) ? row.ingredientId : null,
+                          isExpanded: true,
+                          decoration: const InputDecoration(labelText: 'Bahan'),
+                          items: [
+                            for (final i in ingredients)
+                              DropdownMenuItem(value: i.id, child: Text(i.name, overflow: TextOverflow.ellipsis)),
+                          ],
+                          onChanged: (v) => setState(() => row.ingredientId = v),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
                         child: TextField(
-                          controller: _price,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                          decoration: const InputDecoration(labelText: 'Harga jual (Rp) *'),
+                          controller: row.qty,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+                          decoration: InputDecoration(
+                            labelText: 'Takaran',
+                            suffixText: byId[row.ingredientId]?.unit,
+                            helperText: byId[row.ingredientId] == null
+                                ? null
+                                : formatRupiah((row.value * byId[row.ingredientId]!.avgCost).round()),
+                          ),
                           onChanged: (_) => setState(() {}),
                         ),
                       ),
-                      Expanded(
-                        child: TextField(controller: _category, decoration: const InputDecoration(labelText: 'Kategori')),
+                      IconButton(
+                        tooltip: 'Hapus bahan',
+                        icon: const Icon(Icons.close),
+                        onPressed: () => setState(() => _rows.removeAt(index).qty.dispose()),
                       ),
                     ],
                   ),
-                  Wrap(
-                    spacing: 6,
-                    children: [
-                      for (final c in _defaultCategories)
-                        ChoiceChip(
-                          label: Text(c),
-                          selected: _category.text == c,
-                          onSelected: (_) => setState(() => _category.text = c),
-                        ),
-                    ],
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Tampil di kasir'),
-                    value: _active,
-                    onChanged: (v) => setState(() => _active = v),
-                  ),
-                  const Divider(),
-                  Text('Resep per porsi', style: text.titleMedium),
-                  Text(
-                    ingredients.isEmpty
-                        ? 'Belum ada bahan. Bahan otomatis muncul saat pesanan distributor diterima, '
-                            'atau tambahkan manual di Stok bahan.'
-                        : 'Setiap porsi terjual memotong stok bahan sesuai takaran ini. Kosongkan bila menu tidak memakai bahan.',
-                    style: text.bodySmall,
-                  ),
-                  for (final (index, row) in _rows.indexed)
-                    Row(
-                      key: ObjectKey(row),
-                      spacing: 8,
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: DropdownButtonFormField<String>(
-                            initialValue: byId.containsKey(row.ingredientId) ? row.ingredientId : null,
-                            isExpanded: true,
-                            decoration: const InputDecoration(labelText: 'Bahan'),
-                            items: [
-                              for (final i in ingredients)
-                                DropdownMenuItem(value: i.id, child: Text(i.name, overflow: TextOverflow.ellipsis)),
-                            ],
-                            onChanged: (v) => setState(() => row.ingredientId = v),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          child: TextField(
-                            controller: row.qty,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-                            decoration: InputDecoration(
-                              labelText: 'Takaran',
-                              suffixText: byId[row.ingredientId]?.unit,
-                              helperText: byId[row.ingredientId] == null
-                                  ? null
-                                  : formatRupiah((row.value * byId[row.ingredientId]!.avgCost).round()),
-                            ),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Hapus bahan',
-                          icon: const Icon(Icons.close),
-                          onPressed: () => setState(() => _rows.removeAt(index).qty.dispose()),
-                        ),
-                      ],
-                    ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: OutlinedButton.icon(
-                      onPressed: ingredients.isEmpty ? null : () => setState(() => _rows.add(_RecipeRow())),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Tambah bahan'),
-                    ),
-                  ),
-                  Card(
-                    margin: EdgeInsets.zero,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        spacing: 4,
-                        children: [
-                          _row('HPP bahan per porsi', formatRupiah(cost)),
-                          _row('Laba kotor per porsi', formatRupiah(price - cost)),
-                          _row('Margin', price == 0 ? '-' : '${((price - cost) / price * 100).round()}%'),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                const Divider(height: AppSpacing.xl),
+                InfoRow(label: 'HPP bahan per porsi', value: formatRupiah(cost), bold: true),
+                InfoRow(label: 'Laba kotor per porsi', value: formatRupiah(price - cost)),
+                InfoRow(label: 'Margin', value: price == 0 ? '-' : '${((price - cost) / price * 100).round()}%'),
+              ],
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _row(String label, String value) => Row(children: [Text(label), const Spacer(), Text(value)]);
 }

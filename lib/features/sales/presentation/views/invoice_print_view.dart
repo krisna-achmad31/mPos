@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
 
+import '../../../../core/widgets/app_layout.dart';
 import '../../../auth/auth_providers.dart';
 import '../../../auth/domain/entities/app_user.dart';
 import '../../../settings/domain/store_settings.dart';
@@ -54,30 +55,34 @@ class InvoicePrintView extends ConsumerWidget {
       paymentLabel: _paymentLabel(ref),
     );
     final fileName = invoicePdfFileName(invoice);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Invoice ${invoice.number}'),
-        actions: [
-          if (ready) ...[
-            TextButton.icon(
-              // Di web: mengunduh file PDF; di HP: membuka menu bagikan / simpan.
-              onPressed: () async => Printing.sharePdf(bytes: await buildInvoicePdf(data), filename: fileName),
-              icon: const Icon(Icons.download),
-              label: const Text('Unduh PDF'),
-            ),
-            FilledButton.icon(
-              onPressed: () => Printing.layoutPdf(name: invoice.number, format: PdfPageFormat.a4, onLayout: (_) => buildInvoicePdf(data)),
-              icon: const Icon(Icons.print),
-              label: const Text('Cetak'),
-            ),
-            const SizedBox(width: 12),
-          ],
+    return PageScaffold(
+      leading: const BackButton(),
+      title: 'Cetak nota',
+      subtitle: 'Pratinjau ukuran A4 · unduh atau cetak PDF.',
+      breadcrumb: '/  Riwayat nota / Cetak',
+      scrollable: false,
+      appBarActions: [
+        if (ready) ...[
+          TextButton.icon(
+            // Di web: mengunduh file PDF; di HP: membuka menu bagikan / simpan.
+            onPressed: () async => Printing.sharePdf(bytes: await buildInvoicePdf(data), filename: fileName),
+            icon: const Icon(Icons.download),
+            label: const Text('Unduh PDF'),
+          ),
+          FilledButton.icon(
+            onPressed: () =>
+                Printing.layoutPdf(name: invoice.number, format: PdfPageFormat.a4, onLayout: (_) => buildInvoicePdf(data)),
+            icon: const Icon(Icons.print),
+            label: const Text('Cetak'),
+          ),
         ],
-      ),
-      body: !ready
+      ],
+      child: !ready
           ? const Center(child: CircularProgressIndicator())
           : PdfPreview(
-              key: ValueKey(Object.hash(data.distributorName, data.settings, data.logoPng?.length, data.customer, data.paymentLabel)),
+              key: ValueKey(
+                Object.hash(data.distributorName, data.settings, data.logoPng?.length, data.customer, data.paymentLabel),
+              ),
               build: (_) => buildInvoicePdf(data),
               initialPageFormat: PdfPageFormat.a4,
               canChangePageFormat: false,
@@ -87,8 +92,11 @@ class InvoicePrintView extends ConsumerWidget {
               useActions: false,
               onError: (context, error) => Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text('Pratinjau gagal ditampilkan: $error\nGunakan tombol Unduh PDF / Cetak.', textAlign: TextAlign.center),
+                  padding: const EdgeInsets.all(AppSpacing.xxl),
+                  child: Text(
+                    'Pratinjau gagal ditampilkan: $error\nGunakan tombol Unduh PDF / Cetak.',
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
             ),
