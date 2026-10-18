@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/error/app_exception.dart';
 import '../../../../core/utils/dates.dart';
@@ -13,6 +14,10 @@ import '../../../../core/widgets/product_picker.dart';
 import '../../../../core/widgets/status_badge.dart';
 import '../../../auth/auth_providers.dart';
 import '../../../products/domain/entities/product.dart';
+import '../../../products/product_providers.dart';
+import '../../../settings/domain/store_settings.dart';
+import '../../../settings/settings_providers.dart';
+import '../../domain/services/stock_calculator.dart';
 import '../../domain/entities/stock_receipt.dart';
 import '../../stock_providers.dart';
 import '../viewmodels/stock_view_models.dart';
@@ -61,6 +66,28 @@ class _StockInFormState extends ConsumerState<_StockInForm> {
 
   /// Isi kemasan yang dipilih (1 = satuan dasar).
   int _contents = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pratinjau HPP ikut berubah saat qty / harga beli diketik.
+    for (final c in [_qty, _price]) {
+      c.addListener(() => setState(() {}));
+    }
+  }
+
+  /// Barang yang sedang diketik (belum ditambahkan), dalam satuan dasar.
+  StockReceiptItem? get _pending {
+    final product = _selected;
+    final qty = parseRupiah(_qty.text) * _contents;
+    if (product == null || qty <= 0 || _price.text.trim().isEmpty) return null;
+    return StockReceiptItem(
+      productId: product.id,
+      productName: product.name,
+      qty: qty,
+      buyPrice: (parseRupiah(_price.text) / _contents).round(),
+    );
+  }
 
   @override
   void dispose() {
@@ -218,6 +245,8 @@ class _StockInFormState extends ConsumerState<_StockInForm> {
                   ),
                 ],
               ),
+              if (_pending case final pending?)
+                _HppImpact(items: [...state.items, pending], only: pending.productId, compact: true),
               if (state.items.isEmpty)
                 const EmptyState(icon: Icons.move_to_inbox_outlined, message: 'Belum ada barang')
               else
@@ -225,6 +254,7 @@ class _StockInFormState extends ConsumerState<_StockInForm> {
                   items: state.items,
                   onRemove: vm.removeItem,
                 ),
+              if (state.items.isNotEmpty) _HppImpact(items: state.items),
               if (state.items.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: AppSpacing.sm),
@@ -257,6 +287,104 @@ class _StockInFormState extends ConsumerState<_StockInForm> {
       ],
     );
   }
+}
+
+/// Dampak penerimaan ke HPP rata-rata: HPP sekarang → setelah disimpan, dan saran harga jual dari margin Owner.
+/// Harga jual tidak diubah di sini; Owner bisa membuka produknya untuk menyesuaikan.
+class _HppImpact extends ConsumerWidget {
+  const _HppImpact({required this.items, this.only, this.compact = false});
+
+  final List<StockReceiptItem> items;
+
+  /// Hanya tampilkan produk ini (pratinjau barang yang sedang diketik).
+  final String? only;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final costs = ref.watch(productCostsProvider).value;
+    final products = {for (final p in ref.watch(productsProvider).value ?? const <Product>[]) p.id: p};
+    if (costs == null || products.isEmpty) return const SizedBox.shrink();
+    final settings = ref.watch(storeSettingsProvider).value ?? const StoreSettings();
+    final isOwner = ref.watch(currentUserProvider).isOwner;
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
+
+    final rows = <_HppRow>[];
+    for (final id in {for (final i in items) i.productId}) {
+      final product = products[id];
+      if (product == null || (only != null && id != only)) continue;
+      final currentHpp = costs[id]?.hpp ?? 0;
+      final stock = product.stock;
+      final next = StockCalculator.projectedHpp(productId: id, currentStock: stock, currentHpp: currentHpp, items: items);
+      rows.add(_HppRow(product, currentHpp, next, settings.suggestPrice(next)));
+    }
+    // Ringkasan hanya perlu saat harga beli berubah; pratinjau selalu tampil.
+    final shown = compact ? rows : rows.where((r) => r.changed).toList();
+    if (shown.isEmpty) return const SizedBox.shrink();
+
+    Widget line(_HppRow r) {
+      final p = r.product;
+      final sellNote = r.suggested <= 0
+          ? ''
+          : p.sellPrice < r.next
+              ? ' · harga jual ${formatRupiah(p.sellPrice)} di bawah modal'
+              : p.sellPrice < r.suggested
+                  ? ' · harga jual ${formatRupiah(p.sellPrice)}, saran ${formatRupiah(r.suggested)}'
+                  : ' · harga jual ${formatRupiah(p.sellPrice)} sudah sesuai';
+      final warn = r.suggested > 0 && p.sellPrice < r.suggested;
+      return Row(
+        spacing: AppSpacing.sm,
+        children: [
+          Expanded(
+            child: Text.rich(
+              TextSpan(children: [
+                if (!compact) TextSpan(text: '${p.name}: ', style: const TextStyle(fontWeight: FontWeight.w600)),
+                TextSpan(
+                  text: r.current > 0 && r.changed
+                      ? 'HPP ${formatRupiah(r.current)} (stok ${formatNumber(p.stock < 0 ? 0 : p.stock)}) → ${formatRupiah(r.next)}'
+                      : 'HPP ${formatRupiah(r.next)}',
+                ),
+                TextSpan(text: sellNote, style: TextStyle(color: warn ? tokens.warning : tokens.muted)),
+              ]),
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          if (isOwner && warn)
+            TextButton(onPressed: () => context.go('/owner/products/${p.id}'), child: const Text('Atur harga')),
+        ],
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(color: tokens.primaryTint, borderRadius: BorderRadius.circular(AppRadius.control)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: AppSpacing.xs,
+        children: [
+          Text(
+            compact ? 'Setelah barang ini masuk' : 'Perubahan HPP rata-rata (margin ${_pct(settings.marginPercent)}%)',
+            style: theme.textTheme.labelMedium?.copyWith(color: tokens.muted),
+          ),
+          for (final r in shown) line(r),
+        ],
+      ),
+    );
+  }
+
+  static String _pct(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
+}
+
+class _HppRow {
+  const _HppRow(this.product, this.current, this.next, this.suggested);
+
+  final Product product;
+  final int current;
+  final int next;
+  final int suggested;
+
+  bool get changed => current != next;
 }
 
 /// Daftar barang diterima: tabel di layar lebar, baris kartu di HP.

@@ -6,6 +6,7 @@ import '../../../auth/auth_providers.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/services/bundle_rules.dart';
 import '../../domain/services/inventory_summary.dart';
+import '../../domain/services/price_suggestion.dart';
 import '../../product_providers.dart';
 import '../../../reports/domain/demo_catalog.dart';
 import '../../../stock/domain/entities/stock_receipt.dart';
@@ -220,6 +221,8 @@ final reorderProductsProvider = Provider<AsyncValue<List<Product>>>(
 class ProductFormViewModel extends ActionViewModel {
   Future<bool> save(Product product, {required int buyPrice}) => run(() async {
         if (product.name.trim().isEmpty) throw const AppException('Nama produk wajib diisi.');
+        final taken = BarcodeRules.owner(await readReady(productsProvider.future), product.barcode, excludeId: product.id);
+        if (taken != null) throw AppException(barcodeTakenMessage(taken));
         if (product.isBundle) {
           BundleRules.validate(product);
           final user = ref.read(currentUserProvider);
@@ -249,6 +252,9 @@ class ProductFormViewModel extends ActionViewModel {
   Future<bool> setActive(Product product, bool active) =>
       run(() => ref.read(productRepositoryProvider).setActive(product.id, active));
 }
+
+String barcodeTakenMessage(Product taken) => 'Barcode ${taken.barcode} sudah dipakai "${taken.name}". '
+    'Barang yang sama (walau harga beli berbeda) ditambah lewat Stok Masuk agar HPP-nya dirata-rata.';
 
 final productFormViewModelProvider =
     NotifierProvider<ProductFormViewModel, AsyncValue<void>>(ProductFormViewModel.new);

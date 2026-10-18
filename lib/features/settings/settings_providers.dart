@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_providers.dart';
+import '../../core/error/app_exception.dart';
 import '../../core/utils/png_logo.dart';
 import '../../core/viewmodel/action_view_model.dart';
 import 'data/firestore_settings_repository.dart';
@@ -24,6 +25,7 @@ final distributorLogoProvider = StreamProvider<Uint8List?>(
 class SettingsViewModel extends ActionViewModel {
   /// Nama toko = nama distributor: ikut diperbarui agar kop invoice, sidebar, dan pilihan distributor sama.
   Future<bool> save(StoreSettings settings) => run(() async {
+        if (settings.marginPercent < 0) throw const AppException('Margin tidak boleh negatif.');
         await ref.read(settingsRepositoryProvider).save(settings);
         final name = settings.storeName.trim();
         final distributor = await readReady(currentDistributorProvider.future);

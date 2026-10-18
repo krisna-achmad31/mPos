@@ -11,7 +11,10 @@ import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../../core/widgets/product_image_view.dart';
+import '../../../settings/domain/store_settings.dart';
+import '../../../settings/settings_providers.dart';
 import '../../domain/entities/product.dart';
+import '../../domain/services/price_suggestion.dart';
 import '../../product_providers.dart';
 import '../viewmodels/product_view_models.dart';
 import 'bundle_form_view.dart';
@@ -118,8 +121,8 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   @override
   void initState() {
     super.initState();
-    // Label "1 karton = 24 pcs" ikut berubah saat satuan / isi diketik.
-    for (final c in [_unit, ..._packContents.values]) {
+    // Label "1 karton = 24 pcs", peringatan barcode, dan saran harga ikut berubah saat diketik.
+    for (final c in [_unit, _barcode, _buyPrice, _sellPrice, ..._packContents.values]) {
       c.addListener(_refresh);
     }
   }
@@ -246,6 +249,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                   ),
                   field(_name, 'Nama produk', required: true),
                   responsive([field(_sku, 'SKU'), field(_barcode, 'Barcode')]),
+                  _BarcodeWarning(barcode: _barcode.text, productId: widget.product?.id ?? ''),
                   responsive([
                     _CategoryField(value: _category, onChanged: (v) => setState(() => _category = v)),
                     field(_unit, 'Satuan jual', helper: 'Satuan terkecil, mis. pcs atau kg'),
@@ -275,6 +279,16 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                     field(_buyPrice, 'Harga beli (Rp)', number: true),
                     field(_sellPrice, 'Harga jual satuan (Rp)', number: true, required: true),
                   ]),
+                  _PriceSuggestionPanel(
+                    // Produk lama: HPP rata-rata dari stok masuk. Produk baru: HPP awal = harga beli.
+                    hpp: widget.product != null && (widget.cost?.hpp ?? 0) > 0
+                        ? widget.cost!.hpp
+                        : parseRupiah(_buyPrice.text),
+                    isAverage: widget.product != null && (widget.cost?.hpp ?? 0) > 0,
+                    unit: _unitLabel,
+                    sellPrice: parseRupiah(_sellPrice.text),
+                    onUse: (price) => _sellPrice.text = '$price',
+                  ),
                   responsive([
                     field(_wholesalePrice, 'Harga grosir (Rp)', number: true, helper: 'Kosongkan bila tidak ada'),
                     field(_wholesaleMin, 'Qty minimal grosir', number: true),
@@ -337,6 +351,113 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       ),
     );
   }
+}
+
+/// Peringatan langsung saat barcode sudah dipakai produk lain (simpan tetap ditolak ViewModel).
+class _BarcodeWarning extends ConsumerWidget {
+  const _BarcodeWarning({required this.barcode, required this.productId});
+
+  final String barcode;
+  final String productId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final products = ref.watch(productsProvider).value ?? const <Product>[];
+    final taken = BarcodeRules.owner(products, barcode, excludeId: productId);
+    if (taken == null) return const SizedBox.shrink();
+    final tokens = context.tokens;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(color: tokens.dangerTint, borderRadius: BorderRadius.circular(AppRadius.control)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: AppSpacing.sm,
+        children: [
+          Text(barcodeTakenMessage(taken), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.danger)),
+          Wrap(
+            spacing: AppSpacing.sm,
+            children: [
+              OutlinedButton(onPressed: () => context.go('/owner/products/${taken.id}'), child: const Text('Buka produk itu')),
+              FilledButton.tonal(onPressed: () => context.go('/owner/stock-in'), child: const Text('Ke Stok Masuk')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// HPP rata-rata + saran harga jual dari margin di Pengaturan. Tombol "Pakai" hanya mengisi kolom harga jual.
+class _PriceSuggestionPanel extends ConsumerWidget {
+  const _PriceSuggestionPanel({
+    required this.hpp,
+    required this.isAverage,
+    required this.unit,
+    required this.sellPrice,
+    required this.onUse,
+  });
+
+  final int hpp;
+  final bool isAverage;
+  final String unit;
+  final int sellPrice;
+  final ValueChanged<int> onUse;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (hpp <= 0) return const SizedBox.shrink();
+    final settings = ref.watch(storeSettingsProvider).value ?? const StoreSettings();
+    final suggested = settings.suggestPrice(hpp);
+    final margin = PriceSuggestion.marginOf(sellPrice, hpp);
+    final theme = Theme.of(context);
+    final tokens = context.tokens;
+    final label = theme.textTheme.bodySmall?.copyWith(color: tokens.muted);
+    final value = theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700);
+
+    final (String, Color)? note = switch (sellPrice) {
+      <= 0 => null,
+      final p when p < hpp => ('Harga jual di bawah modal: rugi ${formatRupiah(hpp - p)} per $unit.', tokens.danger),
+      final p when p < suggested => ('Margin sekarang $margin%, di bawah target ${_pct(settings.marginPercent)}%.', tokens.warning),
+      _ => ('Margin sekarang $margin%.', tokens.success),
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(color: tokens.primaryTint, borderRadius: BorderRadius.circular(AppRadius.control)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: AppSpacing.sm,
+        children: [
+          Wrap(
+            spacing: AppSpacing.xl,
+            runSpacing: AppSpacing.sm,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(isAverage ? 'HPP rata-rata (dari stok masuk)' : 'HPP awal', style: label),
+                  Text('${formatRupiah(hpp)} / $unit', style: value),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Saran harga jual (margin ${_pct(settings.marginPercent)}%)', style: label),
+                  Text(formatRupiah(suggested), style: value),
+                ],
+              ),
+              if (sellPrice != suggested)
+                FilledButton.tonal(onPressed: () => onUse(suggested), child: const Text('Pakai harga ini')),
+            ],
+          ),
+          if (note != null) Text(note.$1, style: theme.textTheme.bodySmall?.copyWith(color: note.$2)),
+        ],
+      ),
+    );
+  }
+
+  static String _pct(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
 }
 
 /// Kategori dipilih dari daftar; Owner bisa menambah kategori baru.
