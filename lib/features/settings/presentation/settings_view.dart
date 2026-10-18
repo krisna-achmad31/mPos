@@ -2,11 +2,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/utils/money.dart';
 import '../../../core/utils/png_logo.dart';
 import '../../../core/widgets/app_layout.dart';
 import '../../../core/widgets/appearance_picker.dart';
 import '../../../core/widgets/async_value_view.dart';
 import '../../../core/widgets/feedback.dart';
+import '../../products/domain/services/price_suggestion.dart';
 import '../domain/store_settings.dart';
 import '../settings_providers.dart';
 
@@ -49,10 +51,23 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
   late final _signature = TextEditingController(text: widget.initial.signatureName);
   late bool _taxEnabled = widget.initial.taxEnabled;
   late String _noteType = widget.initial.defaultNoteType;
+  late final _margin = TextEditingController(text: _percent(widget.initial.marginPercent));
+  late int _rounding = widget.initial.priceRounding;
+
+  static String _percent(double v) => v == v.roundToDouble() ? '${v.round()}' : '$v';
+
+  double get _marginValue => double.tryParse(_margin.text.replaceAll(',', '.')) ?? 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Contoh saran harga ikut berubah saat margin diketik.
+    _margin.addListener(() => setState(() {}));
+  }
 
   @override
   void dispose() {
-    for (final c in [_name, _address, _phone, _email, _tax, _bank, _receiptFooter, _invoiceFooter, _signature]) {
+    for (final c in [_name, _address, _phone, _email, _tax, _bank, _receiptFooter, _invoiceFooter, _signature, _margin]) {
       c.dispose();
     }
     super.dispose();
@@ -71,6 +86,8 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
           invoiceFooter: _invoiceFooter.text.trim(),
           signatureName: _signature.text.trim(),
           defaultNoteType: _noteType,
+          marginPercent: _marginValue,
+          priceRounding: _rounding,
         ));
     if (!mounted) return;
     showMessage(context, ok ? 'Pengaturan disimpan' : '${ref.read(settingsViewModelProvider).error}', isError: !ok);
@@ -139,6 +156,47 @@ class _SettingsFormState extends ConsumerState<_SettingsForm> {
               TextField(controller: _receiptFooter, maxLines: 3, decoration: const InputDecoration(labelText: 'Footer struk')),
               TextField(controller: _invoiceFooter, maxLines: 2, decoration: const InputDecoration(labelText: 'Footer invoice / faktur')),
               TextField(controller: _signature, decoration: const InputDecoration(labelText: 'Nama penanda tangan (Hormat kami)')),
+            ],
+          ),
+        ),
+        SectionCard(
+          title: 'Saran harga jual',
+          subtitle: 'Dihitung dari HPP rata-rata stok masuk. Harga jual tidak berubah sendiri; Owner yang memutuskan.',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: AppSpacing.md,
+            children: [
+              Wrap(
+                spacing: AppSpacing.md,
+                runSpacing: AppSpacing.md,
+                children: [
+                  SizedBox(
+                    width: 200,
+                    child: TextField(
+                      controller: _margin,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Margin', suffixText: '%'),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 200,
+                    child: DropdownButtonFormField<int>(
+                      initialValue: PriceSuggestion.roundingOptions.contains(_rounding) ? _rounding : null,
+                      decoration: const InputDecoration(labelText: 'Bulatkan ke atas'),
+                      items: [
+                        for (final r in PriceSuggestion.roundingOptions)
+                          DropdownMenuItem(value: r, child: Text(formatRupiah(r))),
+                      ],
+                      onChanged: (v) => setState(() => _rounding = v ?? _rounding),
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                'Contoh: HPP ${formatRupiah(11875)} → saran '
+                '${formatRupiah(PriceSuggestion.suggest(11875, _marginValue, roundTo: _rounding))}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.tokens.muted),
+              ),
             ],
           ),
         ),

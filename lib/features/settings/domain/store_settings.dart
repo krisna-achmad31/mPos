@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:equatable/equatable.dart';
 
+import '../../products/domain/services/price_suggestion.dart';
+
 class StoreSettings extends Equatable {
   const StoreSettings({
     this.storeName = 'Toko Saya',
@@ -15,6 +17,8 @@ class StoreSettings extends Equatable {
     this.invoiceFooter = '',
     this.signatureName = '',
     this.defaultNoteType = 'struk80',
+    this.marginPercent = PriceSuggestion.defaultMarginPercent,
+    this.priceRounding = PriceSuggestion.defaultRounding,
   });
 
   final String storeName;
@@ -33,6 +37,14 @@ class StoreSettings extends Equatable {
   /// struk58 | struk80 | invoice | faktur
   final String defaultNoteType;
 
+  /// Margin di atas HPP rata-rata untuk saran harga jual.
+  final double marginPercent;
+
+  /// Saran harga jual dibulatkan ke atas ke kelipatan ini (Rp).
+  final int priceRounding;
+
+  int suggestPrice(int unitCost) => PriceSuggestion.suggest(unitCost, marginPercent, roundTo: priceRounding);
+
   double get effectiveTax => taxEnabled ? taxPercent : 0;
 
   StoreSettings copyWith({
@@ -47,6 +59,8 @@ class StoreSettings extends Equatable {
     String? invoiceFooter,
     String? signatureName,
     String? defaultNoteType,
+    double? marginPercent,
+    int? priceRounding,
   }) =>
       StoreSettings(
         storeName: storeName ?? this.storeName,
@@ -60,12 +74,14 @@ class StoreSettings extends Equatable {
         invoiceFooter: invoiceFooter ?? this.invoiceFooter,
         signatureName: signatureName ?? this.signatureName,
         defaultNoteType: defaultNoteType ?? this.defaultNoteType,
+        marginPercent: marginPercent ?? this.marginPercent,
+        priceRounding: priceRounding ?? this.priceRounding,
       );
 
   @override
   List<Object?> get props => [
         storeName, address, phone, email, taxEnabled, taxPercent, bankInfo, receiptFooter, invoiceFooter,
-        signatureName, defaultNoteType,
+        signatureName, defaultNoteType, marginPercent, priceRounding,
       ];
 }
 

@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/firebase/collections.dart';
 import '../../../core/firebase/firestore_parsing.dart';
+import '../../products/domain/services/price_suggestion.dart';
 import '../domain/store_settings.dart';
 import '../../../core/firebase/tenant_store.dart';
 
@@ -34,6 +35,9 @@ class FirestoreSettingsRepository implements SettingsRepository {
           invoiceFooter: readString(m['invoiceFooter']),
           signatureName: readString(m['signatureName']),
           defaultNoteType: readString(m['defaultNoteType']).isEmpty ? 'struk80' : readString(m['defaultNoteType']),
+          // Pengaturan lama belum punya margin: pakai bawaan.
+          marginPercent: m['marginPercent'] == null ? PriceSuggestion.defaultMarginPercent : readDouble(m['marginPercent']),
+          priceRounding: readInt(m['priceRounding']) > 0 ? readInt(m['priceRounding']) : PriceSuggestion.defaultRounding,
         );
       });
 
@@ -50,6 +54,8 @@ class FirestoreSettingsRepository implements SettingsRepository {
         'invoiceFooter': s.invoiceFooter,
         'signatureName': s.signatureName,
         'defaultNoteType': s.defaultNoteType,
+        'marginPercent': s.marginPercent,
+        'priceRounding': s.priceRounding,
       });
 
   @override

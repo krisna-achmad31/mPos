@@ -8,11 +8,14 @@ import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
 import '../../../../core/widgets/product_image_view.dart';
 import '../../../../core/widgets/status_badge.dart';
+import '../../../settings/domain/store_settings.dart';
+import '../../../settings/settings_providers.dart';
 import '../../../stock/presentation/views/stock_opname_dialog.dart';
 import '../../../reports/domain/demo_catalog.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/services/bundle_rules.dart';
 import '../../domain/services/inventory_summary.dart';
+import '../../domain/services/price_suggestion.dart';
 import '../../product_providers.dart';
 import '../viewmodels/product_view_models.dart';
 
@@ -461,7 +464,7 @@ class _ProductTable extends ConsumerWidget {
                   ),
                   _Remarks(product: p),
                   costCell(() => unitCost(p)),
-                  money(p.sellPrice),
+                  _SellPrice(product: p),
                   money(_carton(p)?.price ?? 0),
                   Text(
                     !p.trackStock ? '-' : '${formatNumber(p.stock)} ${p.unit}',
@@ -486,6 +489,47 @@ class _ProductTable extends ConsumerWidget {
                   const Text(''),
                 ],
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Harga jual + tanda bila di bawah saran harga (HPP rata-rata + margin) atau di bawah modal.
+class _SellPrice extends ConsumerWidget {
+  const _SellPrice({required this.product, this.style});
+
+  final Product product;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final p = product;
+    final costs = ref.watch(productUnitCostsProvider);
+    final settings = ref.watch(storeSettingsProvider).value ?? const StoreSettings();
+    final cost = p.isBundle
+        ? BundleRules.cost(p.bundleItems, (id) => InventorySummary.unitCost(costs[id]))
+        : InventorySummary.unitCost(costs[p.id]);
+    final suggested = settings.suggestPrice(cost);
+    final text = Text(p.sellPrice > 0 ? formatRupiah(p.sellPrice) : '-', style: style);
+    if (suggested <= 0 || p.sellPrice <= 0 || p.sellPrice >= suggested) return text;
+
+    final tokens = context.tokens;
+    final belowCost = p.sellPrice < cost;
+    return Tooltip(
+      message: belowCost
+          ? 'Di bawah modal ${formatRupiah(cost)}'
+          : 'Margin ${PriceSuggestion.marginOf(p.sellPrice, cost)}% · saran ${formatRupiah(suggested)}',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 4,
+        children: [
+          Flexible(child: text),
+          Icon(
+            belowCost ? Icons.error_outline : Icons.trending_down,
+            size: 16,
+            color: belowCost ? tokens.danger : tokens.warning,
           ),
         ],
       ),
@@ -724,7 +768,7 @@ class _ProductCard extends StatelessWidget {
                             ].join(' · '),
                             style: theme.textTheme.bodySmall?.copyWith(color: tokens.muted),
                           ),
-                          Text(formatRupiah(p.sellPrice), style: theme.textTheme.titleMedium),
+                          _SellPrice(product: p, style: theme.textTheme.titleMedium),
                         ],
                       ),
                     ),

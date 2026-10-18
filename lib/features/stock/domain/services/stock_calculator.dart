@@ -16,6 +16,22 @@ abstract final class StockCalculator {
     return ((base * currentHpp + incomingQty * incomingPrice) / totalQty).round();
   }
 
+  /// HPP [productId] setelah semua [items] dokumen ini masuk, dihitung berurutan seperti saat disimpan.
+  static int projectedHpp({
+    required String productId,
+    required int currentStock,
+    required int currentHpp,
+    required Iterable<StockReceiptItem> items,
+  }) {
+    var stock = currentStock;
+    var hpp = currentHpp;
+    for (final item in items.where((i) => i.productId == productId)) {
+      hpp = averageCost(currentStock: stock, currentHpp: hpp, incomingQty: item.qty, incomingPrice: item.buyPrice);
+      stock += item.qty;
+    }
+    return hpp;
+  }
+
   /// Selisih qty per produk antara isi dokumen lama dan baru (baru − lama).
   static Map<String, int> deltas(List<StockReceiptItem> oldItems, List<StockReceiptItem> newItems) {
     final result = <String, int>{};

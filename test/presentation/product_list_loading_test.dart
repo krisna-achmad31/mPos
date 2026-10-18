@@ -7,6 +7,8 @@ import 'package:mpos/features/products/domain/entities/product.dart';
 import 'package:mpos/features/products/presentation/viewmodels/product_view_models.dart';
 import 'package:mpos/features/products/presentation/views/product_list_view.dart';
 import 'package:mpos/features/products/product_providers.dart';
+import 'package:mpos/features/settings/domain/store_settings.dart';
+import 'package:mpos/features/settings/settings_providers.dart';
 
 void main() {
   const kopi = Product(id: 'kopi', name: 'Kopi', sellPrice: 50000, stock: 10);
@@ -21,6 +23,7 @@ void main() {
       productsProvider.overrideWith((ref) => Stream.value(const [kopi])),
       productCostsProvider.overrideWith((ref) => costs.stream),
       categoriesProvider.overrideWith((ref) => Stream.value(const [])),
+      storeSettingsProvider.overrideWith((ref) => Stream.value(const StoreSettings())),
     ]);
     addTearDown(container.dispose);
     container.read(productViewModeProvider.notifier).set(ProductViewMode.table);
