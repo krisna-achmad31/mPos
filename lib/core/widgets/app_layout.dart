@@ -59,25 +59,15 @@ class PageScaffold extends StatelessWidget {
         title: Row(
           spacing: 6,
           children: [
-            Text(
-              workspace,
-              style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
-            ),
+            Text(workspace, style: theme.textTheme.bodySmall?.copyWith(fontSize: 12)),
             Text(
               breadcrumb ?? '/  $title',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: tokens.ink,
-              ),
+              style: theme.textTheme.bodyMedium?.copyWith(fontSize: 12, fontWeight: FontWeight.w500, color: tokens.ink),
             ),
           ],
         ),
         actions: [
-          if (showSync && isWide) ...[
-            const _SyncIndicator(),
-            const SizedBox(width: 12),
-          ],
+          if (showSync && isWide) ...[const _SyncIndicator(), const SizedBox(width: 12)],
           ...appBarActions,
           const SizedBox(width: 8),
         ],
@@ -87,26 +77,15 @@ class PageScaffold extends StatelessWidget {
   }
 
   Widget _body(BuildContext context, DeviceClass device) {
-    final pad =
-        padding ??
-        (device == DeviceClass.phone
-            ? AppSpacing.pagePhone
-            : AppSpacing.pageWide);
-    final heading = PageHeading(
-      title: title,
-      subtitle: subtitle,
-      actions: actions,
-      device: device,
-    );
+    final pad = padding ?? (device == DeviceClass.phone ? AppSpacing.pagePhone : AppSpacing.pageWide);
+    final heading = PageHeading(title: title, subtitle: subtitle, actions: actions, device: device);
 
     final inner = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         heading,
         const SizedBox(height: AppSpacing.xl),
-        if (child != null) ...[
-          if (scrollable) child! else Expanded(child: child!),
-        ],
+        if (child != null) ...[if (scrollable) child! else Expanded(child: child!)],
       ],
     );
 
@@ -131,13 +110,7 @@ class PageScaffold extends StatelessWidget {
 
 /// Judul halaman + keterangan + tombol aksi (padanan `Page heading`).
 class PageHeading extends StatelessWidget {
-  const PageHeading({
-    super.key,
-    required this.title,
-    this.subtitle,
-    this.actions = const [],
-    this.device,
-  });
+  const PageHeading({super.key, required this.title, this.subtitle, this.actions = const [], this.device});
 
   final String title;
   final String? subtitle;
@@ -153,7 +126,6 @@ class PageHeading extends StatelessWidget {
       DeviceClass.tablet => theme.textTheme.headlineMedium,
       DeviceClass.phone => theme.textTheme.headlineSmall,
     };
-    final stacked = size == DeviceClass.phone && actions.isNotEmpty;
 
     final texts = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -163,41 +135,36 @@ class PageHeading extends StatelessWidget {
         if (subtitle != null)
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 640),
-            child: Text(
-              subtitle!,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: context.tokens.muted,
-              ),
-            ),
+            child: Text(subtitle!, style: theme.textTheme.bodyMedium?.copyWith(color: context.tokens.muted)),
           ),
       ],
     );
 
     if (actions.isEmpty) return texts;
 
-    if (stacked) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: AppSpacing.md,
-        children: [
-          texts,
-          Wrap(spacing: 8, runSpacing: 8, children: actions),
-        ],
-      );
-    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Gunakan lebar konten, bukan hanya lebar perangkat: filter bisa memakan ruang judul di tablet vertikal.
+        if (constraints.maxWidth < 1000) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            spacing: AppSpacing.md,
+            children: [
+              texts,
+              Wrap(spacing: 8, runSpacing: 8, children: actions),
+            ],
+          );
+        }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: AppSpacing.lg,
-      children: [
-        Expanded(child: texts),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          alignment: WrapAlignment.end,
-          children: actions,
-        ),
-      ],
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: AppSpacing.lg,
+          children: [
+            Expanded(child: texts),
+            Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.end, children: actions),
+          ],
+        );
+      },
     );
   }
 }
@@ -213,10 +180,7 @@ class _SyncIndicator extends StatelessWidget {
       spacing: 6,
       children: [
         Icon(Icons.check_circle_outline, size: 16, color: tokens.success),
-        Text(
-          'Tersinkron',
-          style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
-        ),
+        Text('Tersinkron', style: theme.textTheme.bodySmall?.copyWith(fontSize: 12)),
       ],
     );
   }
@@ -258,14 +222,10 @@ class SectionCard extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(bottom: bottomMargin),
       child: Material(
-        color: isHighlight
-            ? theme.colorScheme.primary
-            : theme.colorScheme.surface,
+        color: isHighlight ? theme.colorScheme.primary : theme.colorScheme.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.card),
-          side: BorderSide(
-            color: isHighlight ? theme.colorScheme.primary : tokens.line,
-          ),
+          side: BorderSide(color: isHighlight ? theme.colorScheme.primary : tokens.line),
         ),
         clipBehavior: Clip.antiAlias,
         child: Padding(
@@ -284,17 +244,13 @@ class SectionCard extends StatelessWidget {
                         children: [
                           Text(
                             title!,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: isHighlight ? Colors.white : tokens.ink,
-                            ),
+                            style: theme.textTheme.titleSmall?.copyWith(color: isHighlight ? Colors.white : tokens.ink),
                           ),
                           if (subtitle != null)
                             Text(
                               subtitle!,
                               style: theme.textTheme.bodySmall?.copyWith(
-                                color: isHighlight
-                                    ? const Color(0xFFDCE7FF)
-                                    : tokens.muted,
+                                color: isHighlight ? const Color(0xFFDCE7FF) : tokens.muted,
                               ),
                             ),
                         ],
@@ -366,10 +322,7 @@ class KpiTile extends StatelessWidget {
                     Expanded(
                       child: Text(
                         label,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: soft,
-                          fontWeight: FontWeight.w500,
-                        ),
+                        style: theme.textTheme.labelSmall?.copyWith(color: soft, fontWeight: FontWeight.w500),
                       ),
                     ),
                     if (icon != null) Icon(icon, size: 18, color: soft),
@@ -379,19 +332,9 @@ class KpiTile extends StatelessWidget {
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    color: onCard,
-                    fontSize: 24,
-                  ),
+                  style: theme.textTheme.headlineSmall?.copyWith(color: onCard, fontSize: 24),
                 ),
-                if (hint != null)
-                  Text(
-                    hint!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: soft,
-                      fontSize: 11,
-                    ),
-                  ),
+                if (hint != null) Text(hint!, style: theme.textTheme.bodySmall?.copyWith(color: soft, fontSize: 11)),
               ],
             ),
           ),
@@ -403,12 +346,7 @@ class KpiTile extends StatelessWidget {
 
 /// Baris kartu angka: sejajar sama lebar bila ruang cukup, membungkus bila tidak.
 class KpiRow extends StatelessWidget {
-  const KpiRow({
-    super.key,
-    required this.children,
-    this.tileWidth = 200,
-    this.spacing = AppSpacing.md,
-  });
+  const KpiRow({super.key, required this.children, this.tileWidth = 200, this.spacing = AppSpacing.md});
 
   final List<Widget> children;
   final double tileWidth;
@@ -432,10 +370,7 @@ class KpiRow extends StatelessWidget {
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
-          children: [
-            for (final child in children)
-              SizedBox(width: tileWidth, child: child),
-          ],
+          children: [for (final child in children) SizedBox(width: tileWidth, child: child)],
         );
       },
     );
@@ -444,13 +379,7 @@ class KpiRow extends StatelessWidget {
 
 /// Baris label–nilai untuk panel rincian.
 class InfoRow extends StatelessWidget {
-  const InfoRow({
-    super.key,
-    required this.label,
-    required this.value,
-    this.valueColor,
-    this.bold = false,
-  });
+  const InfoRow({super.key, required this.label, required this.value, this.valueColor, this.bold = false});
 
   final String label;
   final String value;
@@ -467,12 +396,7 @@ class InfoRow extends StatelessWidget {
         spacing: AppSpacing.md,
         children: [
           Expanded(
-            child: Text(
-              label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: context.tokens.muted,
-              ),
-            ),
+            child: Text(label, style: theme.textTheme.bodyMedium?.copyWith(color: context.tokens.muted)),
           ),
           Flexible(
             child: Text(
@@ -518,19 +442,11 @@ class AppDataTable extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _TableRow(
-          cells: [for (final c in columns) _header(context, c)],
-          flex: flex,
-          isHeader: true,
-        ),
+        _TableRow(cells: [for (final c in columns) _header(context, c)], flex: flex, isHeader: true),
         for (var i = 0; i < rows.length; i++)
           InkWell(
             onTap: onTap == null ? null : () => onTap!(i),
-            child: _TableRow(
-              cells: rows[i],
-              flex: flex,
-              showDivider: i != rows.length - 1,
-            ),
+            child: _TableRow(cells: rows[i], flex: flex, showDivider: i != rows.length - 1),
           ),
       ],
     );
@@ -538,19 +454,12 @@ class AppDataTable extends StatelessWidget {
 
   Widget _header(BuildContext context, String label) => Text(
     label.toUpperCase(),
-    style: Theme.of(
-      context,
-    ).textTheme.labelSmall?.copyWith(fontSize: 10.5, letterSpacing: 0.4),
+    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10.5, letterSpacing: 0.4),
   );
 }
 
 class _TableRow extends StatelessWidget {
-  const _TableRow({
-    required this.cells,
-    this.flex,
-    this.isHeader = false,
-    this.showDivider = true,
-  });
+  const _TableRow({required this.cells, this.flex, this.isHeader = false, this.showDivider = true});
 
   final List<Widget> cells;
   final List<int>? flex;
@@ -564,9 +473,7 @@ class _TableRow extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        border: showDivider
-            ? Border(bottom: BorderSide(color: tokens.line))
-            : null,
+        border: showDivider ? Border(bottom: BorderSide(color: tokens.line)) : null,
       ),
       padding: EdgeInsets.symmetric(vertical: isHeader ? 10 : 12),
       child: Row(
@@ -576,17 +483,10 @@ class _TableRow extends StatelessWidget {
             Expanded(
               flex: weights[i],
               child: Padding(
-                padding: EdgeInsets.only(
-                  right: i == cells.length - 1 ? 0 : AppSpacing.md,
-                ),
+                padding: EdgeInsets.only(right: i == cells.length - 1 ? 0 : AppSpacing.md),
                 child: DefaultTextStyle.merge(
-                  style:
-                      Theme.of(context).textTheme.bodyMedium ??
-                      const TextStyle(),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: cells[i],
-                  ),
+                  style: Theme.of(context).textTheme.bodyMedium ?? const TextStyle(),
+                  child: Align(alignment: Alignment.centerLeft, child: cells[i]),
                 ),
               ),
             ),

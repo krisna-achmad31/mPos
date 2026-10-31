@@ -10,7 +10,6 @@ import '../../../../core/widgets/feedback.dart';
 import '../../../../core/widgets/product_picker.dart';
 import '../../../../core/widgets/quantity_dialog.dart';
 import '../../../../core/widgets/status_badge.dart';
-import '../../../auth/auth_providers.dart';
 import '../../../pricing/domain/services/pricing_service.dart';
 import '../../../products/domain/entities/product.dart';
 import '../../../products/product_providers.dart';
@@ -18,6 +17,7 @@ import '../../domain/entities/cart_line.dart';
 import '../../domain/services/sale_calculator.dart';
 import '../viewmodels/pos_view_model.dart';
 import '../widgets/line_text.dart';
+import '../widgets/pos_customer_field.dart';
 import '../widgets/totals_table.dart';
 
 /// Kasir langsung untuk pembeli yang datang ke toko.
@@ -98,7 +98,10 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
-          FilledButton(onPressed: () => Navigator.pop(context, parseRupiah(controller.text)), child: const Text('Pakai')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, parseRupiah(controller.text)),
+            child: const Text('Pakai'),
+          ),
         ],
       ),
     );
@@ -112,6 +115,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
   Widget build(BuildContext context) {
     final state = ref.watch(posViewModelProvider);
     final vm = ref.read(posViewModelProvider.notifier);
+    ref.watch(productsProvider);
     final priced = vm.pricedLines();
 
     final list = state.lines.isEmpty
@@ -130,7 +134,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
             itemCount: state.lines.length,
             separatorBuilder: (_, _) => const Divider(height: 1),
             itemBuilder: (context, i) {
-              final line = state.lines[i];
+              final line = priced[i];
               final discount = priced[i].discountAmount;
               final product = _productOf(line.productId);
               return _CartLineTile(
@@ -315,11 +319,15 @@ class _PaymentPanelState extends ConsumerState<_PaymentPanel> {
 
   void _applyDiscount() {
     final value = double.tryParse(_discount.text.replaceAll(',', '.')) ?? 0;
-    ref.read(posViewModelProvider.notifier).setOrderDiscount(value <= 0
-        ? const OrderDiscount.none()
-        : _discountPercent
-            ? OrderDiscount.percent(value)
-            : OrderDiscount.amount(value));
+    ref
+        .read(posViewModelProvider.notifier)
+        .setOrderDiscount(
+          value <= 0
+              ? const OrderDiscount.none()
+              : _discountPercent
+              ? OrderDiscount.percent(value)
+              : OrderDiscount.amount(value),
+        );
   }
 
   Future<void> _checkout() async {
@@ -337,7 +345,6 @@ class _PaymentPanelState extends ConsumerState<_PaymentPanel> {
     final state = ref.watch(posViewModelProvider);
     final vm = ref.read(posViewModelProvider.notifier);
     final totals = ref.watch(posTotalsProvider);
-    final customers = ref.watch(customersProvider).value ?? [];
     final theme = Theme.of(context);
     final tokens = context.tokens;
     final total = totals.total;
@@ -345,25 +352,28 @@ class _PaymentPanelState extends ConsumerState<_PaymentPanel> {
 
     final (String? paymentInfo, BadgeTone? paymentTone) = total > 0
         ? switch (state.method) {
-            PaymentMethod.cash => given >= total
-                ? ('Kembalian ${formatRupiah(given - total)}', BadgeTone.success)
-                : ('Uang kurang ${formatRupiah(total - given)}', BadgeTone.danger),
+            PaymentMethod.cash =>
+              given >= total
+                  ? ('Kembalian ${formatRupiah(given - total)}', BadgeTone.success)
+                  : ('Uang kurang ${formatRupiah(total - given)}', BadgeTone.danger),
             PaymentMethod.transfer || PaymentMethod.qris => ('Dianggap lunas', BadgeTone.success),
-            PaymentMethod.downPayment || PaymentMethod.credit =>
-              ('Sisa tagihan ${formatRupiah((total - given).clamp(0, total))}', BadgeTone.warning),
+            PaymentMethod.downPayment || PaymentMethod.credit => (
+              'Sisa tagihan ${formatRupiah((total - given).clamp(0, total))}',
+              BadgeTone.warning,
+            ),
           }
         : (null, null);
 
     final Color noticeFg = paymentTone == BadgeTone.danger
         ? tokens.danger
         : paymentTone == BadgeTone.warning
-            ? tokens.warning
-            : tokens.success;
+        ? tokens.warning
+        : tokens.success;
     final Color noticeBg = paymentTone == BadgeTone.danger
         ? tokens.dangerTint
         : paymentTone == BadgeTone.warning
-            ? tokens.warningTint
-            : tokens.successTint;
+        ? tokens.warningTint
+        : tokens.successTint;
     final IconData noticeIcon = switch (paymentTone) {
       BadgeTone.danger => Icons.error_outline,
       BadgeTone.warning => Icons.schedule,
@@ -388,17 +398,7 @@ class _PaymentPanelState extends ConsumerState<_PaymentPanel> {
               ),
             ],
           ),
-          DropdownButtonFormField<String?>(
-            key: ValueKey('customer-${state.customer?.uid}'),
-            initialValue: state.customer?.uid,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Pelanggan'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('UMUM')),
-              for (final c in customers) DropdownMenuItem(value: c.uid, child: Text(c.displayName)),
-            ],
-            onChanged: (uid) => vm.setCustomer(customers.where((c) => c.uid == uid).firstOrNull),
-          ),
+          const PosCustomerField(),
           TextField(
             controller: _sales,
             decoration: const InputDecoration(labelText: 'Nama sales (opsional)'),
@@ -416,7 +416,10 @@ class _PaymentPanelState extends ConsumerState<_PaymentPanel> {
                 ),
               ),
               SegmentedButton<bool>(
-                segments: const [ButtonSegment(value: false, label: Text('Rp')), ButtonSegment(value: true, label: Text('%'))],
+                segments: const [
+                  ButtonSegment(value: false, label: Text('Rp')),
+                  ButtonSegment(value: true, label: Text('%')),
+                ],
                 selected: {_discountPercent},
                 onSelectionChanged: (s) {
                   setState(() => _discountPercent = s.first);
@@ -450,10 +453,7 @@ class _PaymentPanelState extends ConsumerState<_PaymentPanel> {
           if (paymentInfo != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-              decoration: BoxDecoration(
-                color: noticeBg,
-                borderRadius: BorderRadius.circular(AppRadius.control),
-              ),
+              decoration: BoxDecoration(color: noticeBg, borderRadius: BorderRadius.circular(AppRadius.control)),
               child: Row(
                 spacing: AppSpacing.sm,
                 children: [

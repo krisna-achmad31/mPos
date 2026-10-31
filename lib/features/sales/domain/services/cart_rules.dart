@@ -6,6 +6,10 @@ import '../entities/cart_line.dart';
 
 /// Aturan keranjang yang sama untuk kasir (Owner) dan aplikasi Customer.
 abstract final class CartRules {
+  /// Hitung ulang harga ketika toko berganti; harga manual tetap dipertahankan.
+  static CartLine reprice(CartLine line, Product product) =>
+      line.priceType == PriceType.manual ? line : _priced(line, product, line.qty);
+
   static int qtyInCart(List<CartLine> lines, String productId, {int? exceptIndex}) {
     var total = 0;
     for (var i = 0; i < lines.length; i++) {
@@ -31,7 +35,8 @@ abstract final class CartRules {
     final result = [...lines];
     if (manualPrice != null) {
       final index = result.indexWhere(
-          (l) => l.productId == product.id && l.priceType == PriceType.manual && l.unitPrice == manualPrice);
+        (l) => l.productId == product.id && l.priceType == PriceType.manual && l.unitPrice == manualPrice,
+      );
       if (index >= 0) {
         result[index] = result[index].copyWith(qty: result[index].qty + qty);
       } else {
@@ -115,13 +120,13 @@ abstract final class CartRules {
   }
 
   static CartLine _line(Product p, int qty, int price, PriceType type) => CartLine(
-        productId: p.id,
-        name: p.name,
-        unit: p.unit,
-        qty: qty,
-        unitPrice: price,
-        priceType: type,
-        trackStock: p.trackStock,
-        components: p.bundleItems,
-      );
+    productId: p.id,
+    name: p.name,
+    unit: p.unit,
+    qty: qty,
+    unitPrice: price,
+    priceType: type,
+    trackStock: p.trackStock,
+    components: p.bundleItems,
+  );
 }

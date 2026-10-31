@@ -13,11 +13,13 @@ import '../../../../core/widgets/feedback.dart';
 import '../../../../core/widgets/product_image_view.dart';
 import '../../../settings/domain/store_settings.dart';
 import '../../../settings/settings_providers.dart';
+import '../../../auth/auth_providers.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/services/price_suggestion.dart';
 import '../../product_providers.dart';
 import '../viewmodels/product_view_models.dart';
 import 'bundle_form_view.dart';
+import 'delete_product_action.dart';
 import 'product_list_view.dart' show categoryIcon;
 
 /// Tambah / ubah produk. [productId] null berarti produk baru.
@@ -94,6 +96,38 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
   late bool _active = widget.product?.active ?? true;
   late String _image = widget.product?.imageBase64 ?? '';
   bool _processingImage = false;
+  late final _customerPrices = {
+    for (final entry in widget.product?.customerPrices.entries ?? const <MapEntry<String, int>>[])
+      entry.key: TextEditingController(text: '${entry.value}'),
+  };
+  final List<TextEditingController> _removedPriceControllers = [];
+
+  Future<void> _addCustomerPrice() async {
+    final customers = ref.read(customersProvider).value;
+    if (customers == null) {
+      showMessage(context, 'Daftar toko belum tersedia. Coba lagi.');
+      return;
+    }
+    final available = customers.where((c) => !_customerPrices.containsKey(c.uid)).toList();
+    if (available.isEmpty) {
+      showMessage(context, 'Tidak ada toko lain yang bisa dipilih. Tambahkan pelanggan melalui menu Pengguna.');
+      return;
+    }
+    final uid = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Pilih toko pelanggan'),
+        children: [
+          for (final customer in available)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, customer.uid),
+              child: Text(customer.displayName),
+            ),
+        ],
+      ),
+    );
+    if (uid != null && mounted) setState(() => _customerPrices[uid] = TextEditingController());
+  }
 
   Future<void> _pickImage() async {
     final file = await FilePicker.pickFile(type: FileType.image);
@@ -143,6 +177,8 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       _minStock,
       ..._packContents.values,
       ..._packPrice.values,
+      ..._customerPrices.values,
+      ..._removedPriceControllers,
     ]) {
       c.dispose();
     }
@@ -168,6 +204,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       ],
       unit: _unit.text.trim().isEmpty ? 'pcs' : _unit.text.trim(),
       sellPrice: parseRupiah(_sellPrice.text),
+      customerPrices: {for (final entry in _customerPrices.entries) entry.key: parseRupiah(entry.value.text)},
       wholesalePrice: parseRupiah(_wholesalePrice.text),
       wholesaleMinQty: parseRupiah(_wholesaleMin.text),
       minStock: parseRupiah(_minStock.text),
@@ -193,6 +230,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
     final theme = Theme.of(context);
     final tokens = context.tokens;
     final digits = [FilteringTextInputFormatter.digitsOnly];
+    final customers = ref.watch(customersProvider);
 
     Widget field(TextEditingController c, String label, {bool number = false, bool required = false, String? helper}) =>
         TextFormField(
@@ -205,11 +243,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
 
     Widget responsive(List<Widget> children) {
       if (context.deviceClass == DeviceClass.phone) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: AppSpacing.md,
-          children: children,
-        );
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: AppSpacing.md, children: children);
       }
       return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,6 +257,17 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
       title: widget.product?.name ?? 'Produk baru',
       subtitle: widget.product == null ? 'Produk / Produk baru' : 'Produk / Detail produk',
       actions: [
+        if (widget.product != null)
+          OutlinedButton.icon(
+            onPressed: state.isLoading
+                ? null
+                : () async {
+                    final ok = await deleteProduct(context, ref, widget.product!);
+                    if (ok && context.mounted) context.go('/owner/products');
+                  },
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Hapus produk'),
+          ),
         FilledButton.icon(
           onPressed: state.isLoading || _processingImage ? null : _save,
           icon: const Icon(Icons.check, size: 18),
@@ -279,6 +324,45 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                     field(_buyPrice, 'Harga beli (Rp)', number: true),
                     field(_sellPrice, 'Harga jual satuan (Rp)', number: true, required: true),
                   ]),
+                  Text('Harga khusus toko pelanggan', style: theme.textTheme.titleSmall),
+                  const Text(
+                    'Opsional. Harga per satuan ini menggantikan harga normal, grosir, dan kemasan untuk toko terpilih.',
+                  ),
+                  for (final entry in _customerPrices.entries)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: entry.value,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: digits,
+                            decoration: InputDecoration(
+                              labelText:
+                                  customers.value?.where((c) => c.uid == entry.key).firstOrNull?.displayName ??
+                                  entry.key,
+                              prefixText: 'Rp ',
+                            ),
+                            validator: (value) => parseRupiah(value ?? '') <= 0 ? 'Harga harus lebih dari 0' : null,
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Hapus harga khusus toko',
+                          onPressed: () => setState(() {
+                            _removedPriceControllers.add(_customerPrices.remove(entry.key)!);
+                          }),
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ],
+                    ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: customers.hasValue ? _addCustomerPrice : null,
+                      icon: const Icon(Icons.add),
+                      label: Text(customers.hasError ? 'Daftar toko gagal dimuat' : 'Tambah harga toko'),
+                    ),
+                  ),
                   _PriceSuggestionPanel(
                     // Produk lama: HPP rata-rata dari stok masuk. Produk baru: HPP awal = harga beli.
                     hpp: widget.product != null && (widget.cost?.hpp ?? 0) > 0
@@ -303,10 +387,7 @@ class _ProductFormState extends ConsumerState<_ProductForm> {
                   for (final name in ProductPack.presetNames)
                     if (name != 'pouch' || _showPouch)
                       responsive([
-                        Text(
-                          name[0].toUpperCase() + name.substring(1),
-                          style: theme.textTheme.titleSmall,
-                        ),
+                        Text(name[0].toUpperCase() + name.substring(1), style: theme.textTheme.titleSmall),
                         field(
                           _packContents[name]!,
                           'Isi per $name ($_unitLabel)',
@@ -373,11 +454,17 @@ class _BarcodeWarning extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: AppSpacing.sm,
         children: [
-          Text(barcodeTakenMessage(taken), style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.danger)),
+          Text(
+            barcodeTakenMessage(taken),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.danger),
+          ),
           Wrap(
             spacing: AppSpacing.sm,
             children: [
-              OutlinedButton(onPressed: () => context.go('/owner/products/${taken.id}'), child: const Text('Buka produk itu')),
+              OutlinedButton(
+                onPressed: () => context.go('/owner/products/${taken.id}'),
+                child: const Text('Buka produk itu'),
+              ),
               FilledButton.tonal(onPressed: () => context.go('/owner/stock-in'), child: const Text('Ke Stok Masuk')),
             ],
           ),
@@ -417,7 +504,10 @@ class _PriceSuggestionPanel extends ConsumerWidget {
     final (String, Color)? note = switch (sellPrice) {
       <= 0 => null,
       final p when p < hpp => ('Harga jual di bawah modal: rugi ${formatRupiah(hpp - p)} per $unit.', tokens.danger),
-      final p when p < suggested => ('Margin sekarang $margin%, di bawah target ${_pct(settings.marginPercent)}%.', tokens.warning),
+      final p when p < suggested => (
+        'Margin sekarang $margin%, di bawah target ${_pct(settings.marginPercent)}%.',
+        tokens.warning,
+      ),
       _ => ('Margin sekarang $margin%.', tokens.success),
     };
 
@@ -534,7 +624,7 @@ class ProductImageField extends StatelessWidget {
         Stack(
           alignment: Alignment.center,
           children: [
-            ProductImageView(imageBase64: imageBase64, fallbackIcon: fallbackIcon, size: 96),
+            ProductImageView(imageBase64: imageBase64, fallbackIcon: fallbackIcon, size: 96, enablePreview: !busy),
             if (busy) const CircularProgressIndicator(),
           ],
         ),

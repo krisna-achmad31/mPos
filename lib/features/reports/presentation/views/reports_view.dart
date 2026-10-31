@@ -16,6 +16,7 @@ import '../../domain/demo_invoice_editor.dart';
 import '../../domain/sales_report.dart';
 import '../viewmodels/report_view_model.dart';
 import '../widgets/report_widgets.dart' show TimeBarChart, ProportionList, DonutChart, dayLabel, hourLabel, timeOf;
+import '../widgets/inventory_value_tile.dart';
 import '../../../sales/presentation/widgets/line_text.dart';
 
 class ReportsView extends ConsumerWidget {
@@ -259,17 +260,16 @@ class _DemoGeneratorDialogState extends ConsumerState<_DemoGeneratorDialog> {
               selected: {_useDemoCatalog},
               onSelectionChanged: (v) => setState(() => _useDemoCatalog = v.first),
             ),
-            Text(
-              switch ((cafe, _useDemoCatalog)) {
-                (true, true) => 'Contoh menu kedai kopi: kopi, non kopi, makanan. '
+            Text(switch ((cafe, _useDemoCatalog)) {
+              (true, true) =>
+                'Contoh menu kedai kopi: kopi, non kopi, makanan. '
                     'Pembeli umum, 1–2 cup per struk, bayar tunai / QRIS.',
-                (true, false) => 'Memakai menu & harga asli Anda (stok bahan tidak berubah).',
-                (false, true) => 'Contoh distributor ke cafe: biji kopi, susu, sirup, bubuk minuman, kemasan. '
+              (true, false) => 'Memakai menu & harga asli Anda (stok bahan tidak berubah).',
+              (false, true) =>
+                'Contoh distributor ke cafe: biji kopi, susu, sirup, bubuk minuman, kemasan. '
                     'Pelanggan contoh berupa cafe, pembelian grosir.',
-                (false, false) => 'Memakai produk & harga asli Anda (stok asli tidak berubah).',
-              },
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+              (false, false) => 'Memakai produk & harga asli Anda (stok asli tidak berubah).',
+            }, style: Theme.of(context).textTheme.bodySmall),
             OutlinedButton.icon(
               icon: const Icon(Icons.event),
               label: Text(formatDate(_date)),
@@ -350,14 +350,20 @@ class _ReportBody extends ConsumerWidget {
 
     // Tanpa penjualan tapi ada pengeluaran: tetap tampilkan laporan agar rugi terlihat.
     if (r.invoices.isEmpty && r.expenses == 0) {
-      return Padding(
-        padding: const EdgeInsets.all(32),
-        child: Text(
-          r.isDemo
-              ? 'Belum ada data demo di periode ini. Tekan "Buat data demo".'
-              : 'Belum ada penjualan di periode ini.',
-          textAlign: TextAlign.center,
-        ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!cafe && !r.isDemo) const KpiRow(children: [InventoryValueTile()]),
+          Padding(
+            padding: const EdgeInsets.all(32),
+            child: Text(
+              r.isDemo
+                  ? 'Belum ada data demo di periode ini. Tekan "Buat data demo".'
+                  : 'Belum ada penjualan di periode ini.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
       );
     }
 
@@ -374,6 +380,7 @@ class _ReportBody extends ConsumerWidget {
               icon: Icons.shopping_basket_outlined,
             ),
             KpiTile(label: 'Item terjual', value: formatNumber(r.itemsSold), icon: Icons.inventory_2_outlined),
+            if (!cafe && !r.isDemo) const InventoryValueTile(),
             KpiTile(
               label: 'Laba kotor',
               value: formatRupiah(r.grossProfit),
@@ -848,10 +855,10 @@ class _ExportDialogState extends State<_ExportDialog> {
   static final _years = [for (var y = DateTime.now().year; y >= DateTime.now().year - 5; y--) y];
 
   ExportRange get _range => switch (_period) {
-        ExportPeriod.range => ExportRange.days(_first, _last),
-        ExportPeriod.month => ExportRange.month(_year, _month),
-        ExportPeriod.year => ExportRange.year(_year),
-      };
+    ExportPeriod.range => ExportRange.days(_first, _last),
+    ExportPeriod.month => ExportRange.month(_year, _month),
+    ExportPeriod.year => ExportRange.year(_year),
+  };
 
   Future<void> _pickDate({required bool first}) async {
     final picked = await showDatePicker(
@@ -874,21 +881,21 @@ class _ExportDialogState extends State<_ExportDialog> {
   }
 
   Widget _dateField(String label, DateTime value, {required bool first}) => Expanded(
-        child: InkWell(
-          onTap: () => _pickDate(first: first),
-          child: InputDecorator(
-            decoration: InputDecoration(labelText: label, suffixIcon: const Icon(Icons.event)),
-            child: Text(formatDate(value)),
-          ),
-        ),
-      );
+    child: InkWell(
+      onTap: () => _pickDate(first: first),
+      child: InputDecorator(
+        decoration: InputDecoration(labelText: label, suffixIcon: const Icon(Icons.event)),
+        child: Text(formatDate(value)),
+      ),
+    ),
+  );
 
   Widget _yearField() => DropdownButtonFormField<int>(
-        initialValue: _years.contains(_year) ? _year : _years.first,
-        decoration: const InputDecoration(labelText: 'Tahun'),
-        items: [for (final y in _years) DropdownMenuItem(value: y, child: Text('$y'))],
-        onChanged: (v) => setState(() => _year = v ?? _year),
-      );
+    initialValue: _years.contains(_year) ? _year : _years.first,
+    decoration: const InputDecoration(labelText: 'Tahun'),
+    items: [for (final y in _years) DropdownMenuItem(value: y, child: Text('$y'))],
+    onChanged: (v) => setState(() => _year = v ?? _year),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -912,24 +919,25 @@ class _ExportDialogState extends State<_ExportDialog> {
               onSelectionChanged: (s) => setState(() => _period = s.first),
             ),
             if (_period == ExportPeriod.range)
-              Row(spacing: 12, children: [
-                _dateField('Dari', _first, first: true),
-                _dateField('Sampai', _last, first: false),
-              ])
+              Row(
+                spacing: 12,
+                children: [_dateField('Dari', _first, first: true), _dateField('Sampai', _last, first: false)],
+              )
             else if (_period == ExportPeriod.month)
-              Row(spacing: 12, children: [
-                Expanded(
-                  child: DropdownButtonFormField<int>(
-                    initialValue: _month,
-                    decoration: const InputDecoration(labelText: 'Bulan'),
-                    items: [
-                      for (var m = 1; m <= 12; m++) DropdownMenuItem(value: m, child: Text(monthNames[m - 1])),
-                    ],
-                    onChanged: (v) => setState(() => _month = v ?? _month),
+              Row(
+                spacing: 12,
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      initialValue: _month,
+                      decoration: const InputDecoration(labelText: 'Bulan'),
+                      items: [for (var m = 1; m <= 12; m++) DropdownMenuItem(value: m, child: Text(monthNames[m - 1]))],
+                      onChanged: (v) => setState(() => _month = v ?? _month),
+                    ),
                   ),
-                ),
-                Expanded(child: _yearField()),
-              ])
+                  Expanded(child: _yearField()),
+                ],
+              )
             else
               _yearField(),
             Text(

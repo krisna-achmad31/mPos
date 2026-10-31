@@ -18,11 +18,8 @@ class CustomerCartState extends Equatable {
 
   int get itemCount => lines.fold(0, (sum, l) => sum + l.qty);
 
-  CustomerCartState copyWith({List<CartLine>? lines, String? note, AsyncValue<void>? submission}) => CustomerCartState(
-        lines: lines ?? this.lines,
-        note: note ?? this.note,
-        submission: submission ?? this.submission,
-      );
+  CustomerCartState copyWith({List<CartLine>? lines, String? note, AsyncValue<void>? submission}) =>
+      CustomerCartState(lines: lines ?? this.lines, note: note ?? this.note, submission: submission ?? this.submission);
 
   @override
   List<Object?> get props => [lines, note, submission];
@@ -40,6 +37,7 @@ class CustomerCartViewModel extends Notifier<CustomerCartState> {
 
   /// Qty dipotong ke stok tersedia. Mengembalikan pesan bila qty disesuaikan.
   String? add(Product product, int qty) {
+    product = product.forCustomer(uid);
     final (lines, added) = CartRules.addClamped(state.lines, product, qty);
     state = state.copyWith(lines: lines);
     if (added == 0) return 'Stok ${product.name} habis atau sudah semua di keranjang.';
@@ -48,6 +46,7 @@ class CustomerCartViewModel extends Notifier<CustomerCartState> {
   }
 
   String? setQty(int index, int qty, Product product) {
+    product = product.forCustomer(uid);
     final others = CartRules.qtyInCart(state.lines, product.id, exceptIndex: index);
     final max = product.trackStock ? product.stock - others : qty;
     final clamped = qty.clamp(0, max < 0 ? 0 : max);
@@ -59,11 +58,11 @@ class CustomerCartViewModel extends Notifier<CustomerCartState> {
 
   Future<bool> checkout() async {
     state = state.copyWith(submission: const AsyncLoading());
-    final result = await AsyncValue.guard(() => ref.read(salesRepositoryProvider).placeOrder(
-          customer: ref.read(currentUserProvider),
-          lines: state.lines,
-          note: state.note.trim(),
-        ));
+    final result = await AsyncValue.guard(
+      () => ref
+          .read(salesRepositoryProvider)
+          .placeOrder(customer: ref.read(currentUserProvider), lines: state.lines, note: state.note.trim()),
+    );
     if (!ref.mounted) return false;
     if (result.hasError) {
       state = state.copyWith(submission: AsyncError(result.error!, result.stackTrace!));
@@ -75,5 +74,6 @@ class CustomerCartViewModel extends Notifier<CustomerCartState> {
 }
 
 /// Satu keranjang per akun pelanggan: ganti akun = keranjang berbeda.
-final customerCartViewModelProvider =
-    NotifierProvider.family<CustomerCartViewModel, CustomerCartState, String>(CustomerCartViewModel.new);
+final customerCartViewModelProvider = NotifierProvider.family<CustomerCartViewModel, CustomerCartState, String>(
+  CustomerCartViewModel.new,
+);

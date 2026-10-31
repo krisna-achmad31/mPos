@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
+import 'package:mpos/features/settings/domain/store_settings.dart';
 import 'package:mpos/features/pricing/domain/services/pricing_service.dart';
 import 'package:mpos/features/reports/data/sales_xlsx.dart';
 import 'package:mpos/features/reports/domain/sales_export.dart';
@@ -86,11 +88,46 @@ void main() {
     expect(cashIn, invoices[1].totals.total); // total nota setelah semua diskon
   });
 
+  test('kop distributor mempertahankan filter, logo, dan rumus setelah baris bergeser', () {
+    final logo = img.encodePng(img.Image(width: 120, height: 60));
+    final bytes = SalesXlsx.build(rows, header: SalesExportHeader(
+      settings: const StoreSettings(storeName: 'Mitra Distributor', address: 'Jl. Contoh 7, Kediri',
+        phone: '081234567890', email: 'info@example.com', bankInfo: 'BCA 123456789'),
+      distributorName: 'Mitra', period: 'Oktober 2026', exportedAt: DateTime(2026, 10, 30, 12), logoPng: logo,
+    ));
+    final zip = ZipDecoder().decodeBytes(bytes);
+    final sheet = String.fromCharCodes(zip.findFile('xl/worksheets/sheet1.xml')!.content);
+    expect(sheet, contains('Mitra Distributor'));
+    expect(sheet, contains('Jl. Contoh 7, Kediri'));
+    expect(sheet, contains('info@example.com'));
+    expect(sheet, contains('LAPORAN PENJUALAN'));
+    expect(sheet, contains('Oktober 2026'));
+    expect(sheet, contains('<autoFilter ref="A8:P${rows.length + 8}"/>'));
+    expect(sheet, contains('topLeftCell="A9"'));
+    expect(sheet, contains('<f>IF(F9="DP",0,O9-(H9*L9))</f><v>150000</v>'));
+    expect(sheet, contains('<mergeCell ref="C1:P1"/>'));
+    expect(zip.findFile('xl/media/logo.png')!.content, logo);
+    final workbook = String.fromCharCodes(zip.findFile('xl/workbook.xml')!.content);
+    expect(workbook, contains('Sheet1!\$1:\$8'));
+    final out = Platform.environment['BRANDED_XLSX_OUT'];
+    if (out != null) File(out).writeAsBytesSync(bytes);
+  });
+
   test('file xlsx valid berisi header dan rumus profit', () {
     final bytes = SalesXlsx.build(rows);
     final zip = ZipDecoder().decodeBytes(bytes);
     final sheet = String.fromCharCodes(zip.findFile('xl/worksheets/sheet1.xml')!.content);
-    expect(sheet, contains('No.\nTransaksi'));
+    for (final header in SalesXlsx.headers) {
+      expect(sheet, contains(header));
+    }
+    expect(sheet, contains('<row r="1" ht="36" customHeight="1">'));
+    expect(sheet, contains('state="frozen"'));
+    expect(sheet, contains('<autoFilter ref="A1:P${rows.length + 1}"/>'));
+    final styles = String.fromCharCodes(zip.findFile('xl/styles.xml')!.content);
+    expect(styles, contains('<b/><sz val="11"/>'));
+    expect(styles, contains('<font><b/><sz val="11"/><color rgb="FF000000"/>'));
+    expect(styles, contains('<xf numFmtId="0" fontId="1" fillId="0" borderId="0"'));
+    expect(styles, isNot(contains('gradientFill')));
     expect(sheet, contains('<f>IF(F2="DP",0,O2-(H2*L2))</f><v>150000</v>'));
     expect(SalesXlsx.excelDate(DateTime(2026, 9, 11, 13, 19)), closeTo(46276.555, 0.001));
     final out = Platform.environment['XLSX_OUT'];
