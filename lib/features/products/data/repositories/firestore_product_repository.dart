@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../../core/firebase/collections.dart';
+import '../../../../core/error/app_exception.dart';
 import '../../domain/entities/product.dart';
 import '../../domain/repositories/product_repository.dart';
 import '../../domain/services/bundle_rules.dart';
@@ -21,7 +22,9 @@ class FirestoreProductRepository implements ProductRepository {
   Stream<List<Product>> watchProducts({bool activeOnly = false}) {
     // Semua produk dibaca agar stok bundling bisa dihitung dari isinya; filter aktif di sini.
     return _products.snapshots().map((snap) {
-      final all = BundleRules.resolveStock(snap.docs.map((d) => ProductModel.fromMap(d.id, d.data())).toList());
+      final all = BundleRules.resolveStock(
+        snap.docs.where((d) => d.data()['deleted'] != true).map((d) => ProductModel.fromMap(d.id, d.data())).toList(),
+      );
       final list = activeOnly ? all.where((p) => p.active).toList() : all;
       list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
       return list;
@@ -32,7 +35,7 @@ class FirestoreProductRepository implements ProductRepository {
   Stream<Product?> watchProduct(String id) => _products
       .doc(id)
       .snapshots()
-      .map((s) => s.exists ? ProductModel.fromMap(s.id, s.data()!) : null);
+      .map((s) => s.exists && s.data()?['deleted'] != true ? ProductModel.fromMap(s.id, s.data()!) : null);
 
   @override
   Future<ProductCost?> getCost(String productId) async {
@@ -41,9 +44,8 @@ class FirestoreProductRepository implements ProductRepository {
   }
 
   @override
-  Stream<Map<String, ProductCost>> watchCosts() => _costs.snapshots().map((snap) => {
-        for (final d in snap.docs) d.id: ProductModel.costFromMap(d.id, d.data()),
-      });
+  Stream<Map<String, ProductCost>> watchCosts() =>
+      _costs.snapshots().map((snap) => {for (final d in snap.docs) d.id: ProductModel.costFromMap(d.id, d.data())});
 
   @override
   Future<String> saveProduct(Product product, {required int buyPrice, required String userId}) async {
@@ -87,7 +89,11 @@ class FirestoreProductRepository implements ProductRepository {
       final ref = _products.doc(item.product.id);
       final map = ProductModel.toEditableMap(item.product);
       if (existing.contains(item.product.id)) {
-        batch.update(ref, {'category': map['category'], 'packs': map['packs'], 'updatedAt': FieldValue.serverTimestamp()});
+        batch.update(ref, {
+          'category': map['category'],
+          'packs': map['packs'],
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
         continue;
       }
       batch.set(ref, {
@@ -106,4 +112,21 @@ class FirestoreProductRepository implements ProductRepository {
   @override
   Future<void> setActive(String id, bool active) =>
       _products.doc(id).update({'active': active, 'updatedAt': FieldValue.serverTimestamp()});
+
+  @override
+  Future<void> deleteProduct(String id) => _db.runTransaction((tx) async {
+    final ref = _products.doc(id);
+    final snapshot = await tx.get(ref);
+    if (!snapshot.exists || snapshot.data()?['deleted'] == true) return;
+    final product = ProductModel.fromMap(id, snapshot.data()!);
+    if (!product.isBundle && product.stock != 0) {
+      throw const AppException('Produk hanya bisa dihapus jika stoknya 0. Sesuaikan stok lewat stock opname.');
+    }
+    tx.update(ref, {
+      'deleted': true,
+      'active': false,
+      'deletedAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  });
 }

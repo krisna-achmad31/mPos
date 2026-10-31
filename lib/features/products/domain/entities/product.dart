@@ -62,14 +62,14 @@ class BundleItem extends Equatable {
   int get bundleTotal => bundlePrice * qty;
 
   BundleItem copyWith({int? qty, int? bundlePrice}) => BundleItem(
-        productId: productId,
-        name: name,
-        qty: qty ?? this.qty,
-        unit: unit,
-        price: price,
-        bundlePrice: bundlePrice ?? this.bundlePrice,
-        trackStock: trackStock,
-      );
+    productId: productId,
+    name: name,
+    qty: qty ?? this.qty,
+    unit: unit,
+    price: price,
+    bundlePrice: bundlePrice ?? this.bundlePrice,
+    trackStock: trackStock,
+  );
 
   @override
   List<Object?> get props => [productId, name, qty, unit, price, bundlePrice, trackStock];
@@ -94,6 +94,7 @@ class Product extends Equatable {
     this.packs = const [],
     this.imageBase64 = '',
     this.bundleItems = const [],
+    this.customerPrices = const {},
   });
 
   final String id;
@@ -103,6 +104,15 @@ class Product extends Equatable {
   final String category;
   final String unit;
   final int sellPrice;
+
+  /// Harga satuan khusus berdasarkan uid toko pelanggan.
+  final Map<String, int> customerPrices;
+
+  Product forCustomer(String? uid) {
+    final price = customerPrices[uid];
+    if (price == null || price <= 0) return this;
+    return copyWith(sellPrice: price, wholesalePrice: 0, wholesaleMinQty: 0, packs: const []);
+  }
 
   /// Harga grosir berlaku otomatis bila qty >= [wholesaleMinQty].
   final int wholesalePrice;
@@ -137,7 +147,8 @@ class Product extends Equatable {
   String get packsLabel => packsBySize.map((p) => p.label(unit)).join(' · ');
 
   /// Kemasan valid, isi terbesar dulu.
-  List<ProductPack> get packsBySize => packs.where((p) => p.isValid).toList()..sort((a, b) => b.contents.compareTo(a.contents));
+  List<ProductPack> get packsBySize =>
+      packs.where((p) => p.isValid).toList()..sort((a, b) => b.contents.compareTo(a.contents));
 
   bool get hasWholesale => wholesalePrice > 0 && wholesaleMinQty > 0;
 
@@ -169,31 +180,47 @@ class Product extends Equatable {
     List<ProductPack>? packs,
     String? imageBase64,
     List<BundleItem>? bundleItems,
-  }) =>
-      Product(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        sku: sku ?? this.sku,
-        barcode: barcode ?? this.barcode,
-        category: category ?? this.category,
-        unit: unit ?? this.unit,
-        sellPrice: sellPrice ?? this.sellPrice,
-        wholesalePrice: wholesalePrice ?? this.wholesalePrice,
-        wholesaleMinQty: wholesaleMinQty ?? this.wholesaleMinQty,
-        minStock: minStock ?? this.minStock,
-        trackStock: trackStock ?? this.trackStock,
-        stock: stock ?? this.stock,
-        active: active ?? this.active,
-        packs: packs ?? this.packs,
-        imageBase64: imageBase64 ?? this.imageBase64,
-        bundleItems: bundleItems ?? this.bundleItems,
-      );
+    Map<String, int>? customerPrices,
+  }) => Product(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    sku: sku ?? this.sku,
+    barcode: barcode ?? this.barcode,
+    category: category ?? this.category,
+    unit: unit ?? this.unit,
+    sellPrice: sellPrice ?? this.sellPrice,
+    wholesalePrice: wholesalePrice ?? this.wholesalePrice,
+    wholesaleMinQty: wholesaleMinQty ?? this.wholesaleMinQty,
+    minStock: minStock ?? this.minStock,
+    trackStock: trackStock ?? this.trackStock,
+    stock: stock ?? this.stock,
+    active: active ?? this.active,
+    packs: packs ?? this.packs,
+    imageBase64: imageBase64 ?? this.imageBase64,
+    bundleItems: bundleItems ?? this.bundleItems,
+    customerPrices: customerPrices ?? this.customerPrices,
+  );
 
   @override
   List<Object?> get props => [
-        id, name, sku, barcode, category, unit, sellPrice, wholesalePrice, wholesaleMinQty,
-        minStock, trackStock, stock, active, packs, imageBase64, bundleItems,
-      ];
+    id,
+    name,
+    sku,
+    barcode,
+    category,
+    unit,
+    sellPrice,
+    wholesalePrice,
+    wholesaleMinQty,
+    minStock,
+    trackStock,
+    stock,
+    active,
+    packs,
+    imageBase64,
+    bundleItems,
+    customerPrices,
+  ];
 }
 
 /// Harga beli dan HPP, disimpan terpisah karena hanya untuk Owner (dan SPV saat stok masuk).

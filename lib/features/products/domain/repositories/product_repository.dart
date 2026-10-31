@@ -15,6 +15,9 @@ abstract interface class ProductRepository {
 
   Future<void> setActive(String id, bool active);
 
+  /// Hapus dari katalog tanpa menghilangkan data untuk riwayat transaksi.
+  Future<void> deleteProduct(String id);
+
   /// Membuat produk dengan id tetap (stok 0). Mengembalikan id produk yang benar-benar baru.
   /// Produk yang id-nya sudah ada hanya diperbarui kategori & kemasannya (harga tidak diubah).
   Future<List<String>> upsertCatalogProducts(List<({Product product, int buyPrice})> items);

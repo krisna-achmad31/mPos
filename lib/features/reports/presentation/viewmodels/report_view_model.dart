@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/error/app_exception.dart';
+import '../../../../core/firebase/firebase_providers.dart';
 import '../../../../core/utils/dates.dart';
 import '../../../../core/viewmodel/action_view_model.dart';
 import '../../../auth/auth_providers.dart';
@@ -16,6 +17,7 @@ import '../../../products/product_providers.dart';
 import '../../../sales/domain/entities/invoice.dart';
 import '../../../sales/presentation/viewmodels/report_view_model.dart';
 import '../../../sales/sales_providers.dart';
+import '../../../settings/settings_providers.dart';
 import '../../data/demo_report_repository.dart';
 import '../../data/sales_xlsx.dart';
 import '../../domain/cafe_demo_catalog.dart';
@@ -80,7 +82,12 @@ typedef DemoCatalogSet = ({List<Product> products, Map<String, int> hpp, List<St
 final demoCatalogProvider = Provider<DemoCatalogSet>(
   (ref) => ref.watch(isCafeWorkspaceProvider)
       ? (products: CafeDemoCatalog.products, hpp: CafeDemoCatalog.hpp, customers: const [], profile: BuyerProfile.cafe)
-      : (products: DemoCatalog.products, hpp: DemoCatalog.hpp, customers: DemoCatalog.customers, profile: BuyerProfile.wholesale),
+      : (
+          products: DemoCatalog.products,
+          hpp: DemoCatalog.hpp,
+          customers: DemoCatalog.customers,
+          profile: BuyerProfile.wholesale,
+        ),
 );
 
 final _invoiceCostsProvider = StreamProvider.family<List<InvoiceCost>, DateTime>(
@@ -206,12 +213,7 @@ class DemoDataViewModel extends ActionViewModel {
   };
 
   Future<bool> editInvoice(Invoice invoice, {required DateTime time, required List<int> qtyByLine}) => run(() {
-    final edited = DemoInvoiceEditor.edit(
-      invoice,
-      time: time,
-      qtyByLine: qtyByLine,
-      products: demoPricingProducts(),
-    );
+    final edited = DemoInvoiceEditor.edit(invoice, time: time, qtyByLine: qtyByLine, products: demoPricingProducts());
     return ref.read(demoReportRepositoryProvider).updateInvoice(edited);
   });
 
@@ -267,38 +269,51 @@ class ReportExportViewModel extends ActionViewModel {
       'Rekap Penjualan${mode == ReportMode.demo ? ' (Demo)' : ''} ${range.label}.xlsx';
 
   Future<bool> exportXlsx(ExportRange range) => run(() async {
-        final mode = ref.read(reportFilterProvider).mode;
-        final demo = mode == ReportMode.demo;
-        final invoices = demo
-            ? await ref.read(demoReportRepositoryProvider).watchInvoices(range.from, range.to).first
-            : await ref.read(salesRepositoryProvider).watchInvoices(from: range.from, to: range.to).first;
-        if (invoices.every((i) => i.voided)) throw AppException('Tidak ada penjualan di ${range.label}.');
+    final mode = ref.read(reportFilterProvider).mode;
+    final demo = mode == ReportMode.demo;
+    final invoices = demo
+        ? await ref.read(demoReportRepositoryProvider).watchInvoices(range.from, range.to).first
+        : await ref.read(salesRepositoryProvider).watchInvoices(from: range.from, to: range.to).first;
+    if (invoices.every((i) => i.voided)) throw AppException('Tidak ada penjualan di ${range.label}.');
 
-        final hpp = {
-          for (final e in (await readReady(productCostsProvider.future)).entries) e.key: e.value.hpp,
-          if (demo) ...ref.read(demoCatalogProvider).hpp,
-        };
-        // Nota asli: HPP yang disalin saat nota terbit, agar sama dengan laporan laba.
-        final unitCosts = demo
-            ? const <String, Map<String, int>>{}
-            : {
-                for (final c in await ref.read(salesRepositoryProvider).watchInvoiceCosts(range.from, range.to).first)
-                  c.invoiceId: c.unitCostByProduct,
-              };
+    final hpp = {
+      for (final e in (await readReady(productCostsProvider.future)).entries) e.key: e.value.hpp,
+      if (demo) ...ref.read(demoCatalogProvider).hpp,
+    };
+    // Nota asli: HPP yang disalin saat nota terbit, agar sama dengan laporan laba.
+    final unitCosts = demo
+        ? const <String, Map<String, int>>{}
+        : {
+            for (final c in await ref.read(salesRepositoryProvider).watchInvoiceCosts(range.from, range.to).first)
+              c.invoiceId: c.unitCostByProduct,
+          };
 
-        final rows = SalesExport.rows(
-          invoices,
-          unitCost: (inv, productId) => unitCosts[inv.id]?[productId] ?? hpp[productId] ?? 0,
-        );
-        await FilePicker.saveFile(
-          fileName: fileName(range, mode),
-          bytes: SalesXlsx.build(rows),
-          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          type: FileType.custom,
-          allowedExtensions: const ['xlsx'],
-        );
-      });
+    final rows = SalesExport.rows(
+      invoices,
+      unitCost: (inv, productId) => unitCosts[inv.id]?[productId] ?? hpp[productId] ?? 0,
+    );
+    final settings = await readReady(storeSettingsProvider.future);
+    final logo = await readReady(distributorLogoProvider.future);
+    final distributor = await readReady(currentDistributorProvider.future);
+    await FilePicker.saveFile(
+      fileName: fileName(range, mode),
+      bytes: SalesXlsx.build(
+        rows,
+        header: SalesExportHeader(
+          settings: settings,
+          distributorName: distributor?.name ?? '',
+          logoPng: logo,
+          period: '${demo ? 'Data demo | ' : ''}${range.label}',
+          exportedAt: ref.read(clockProvider)(),
+        ),
+      ),
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      type: FileType.custom,
+      allowedExtensions: const ['xlsx'],
+    );
+  });
 }
 
-final reportExportViewModelProvider =
-    NotifierProvider<ReportExportViewModel, AsyncValue<void>>(ReportExportViewModel.new);
+final reportExportViewModelProvider = NotifierProvider<ReportExportViewModel, AsyncValue<void>>(
+  ReportExportViewModel.new,
+);

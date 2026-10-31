@@ -6,6 +6,7 @@ import '../../../auth/auth_providers.dart';
 import '../../../auth/domain/entities/app_user.dart';
 import '../../../pricing/pricing_providers.dart';
 import '../../../products/domain/entities/product.dart';
+import '../../../products/product_providers.dart';
 import '../../../settings/settings_providers.dart';
 import '../../domain/entities/cart_line.dart';
 import '../../domain/services/cart_rules.dart';
@@ -16,6 +17,7 @@ class PosState extends Equatable {
   const PosState({
     this.lines = const [],
     this.customer,
+    this.guestCustomerName = '',
     this.salesName = '',
     this.orderDiscount = const OrderDiscount.none(),
     this.method = PaymentMethod.cash,
@@ -26,8 +28,11 @@ class PosState extends Equatable {
 
   final List<CartLine> lines;
 
-  /// null = pelanggan umum.
+  /// null = pelanggan umum atau pembeli tanpa akun (lihat [guestCustomerName]).
   final AppUser? customer;
+
+  /// Nama pembeli langsung / WhatsApp yang tidak memiliki akun.
+  final String guestCustomerName;
   final String salesName;
   final OrderDiscount orderDiscount;
   final PaymentMethod method;
@@ -37,31 +42,42 @@ class PosState extends Equatable {
   /// Pesan validasi terakhir (mis. stok kurang).
   final String? message;
 
-  String get customerName => customer?.displayName ?? 'UMUM';
+  String get customerName => customer?.displayName ?? (guestCustomerName.isEmpty ? 'UMUM' : guestCustomerName);
 
   PosState copyWith({
     List<CartLine>? lines,
     AppUser? Function()? customer,
+    String? guestCustomerName,
     String? salesName,
     OrderDiscount? orderDiscount,
     PaymentMethod? method,
     int? amountGiven,
     AsyncValue<String?>? submission,
     String? Function()? message,
-  }) =>
-      PosState(
-        lines: lines ?? this.lines,
-        customer: customer != null ? customer() : this.customer,
-        salesName: salesName ?? this.salesName,
-        orderDiscount: orderDiscount ?? this.orderDiscount,
-        method: method ?? this.method,
-        amountGiven: amountGiven ?? this.amountGiven,
-        submission: submission ?? this.submission,
-        message: message != null ? message() : this.message,
-      );
+  }) => PosState(
+    lines: lines ?? this.lines,
+    customer: customer != null ? customer() : this.customer,
+    guestCustomerName: guestCustomerName ?? this.guestCustomerName,
+    salesName: salesName ?? this.salesName,
+    orderDiscount: orderDiscount ?? this.orderDiscount,
+    method: method ?? this.method,
+    amountGiven: amountGiven ?? this.amountGiven,
+    submission: submission ?? this.submission,
+    message: message != null ? message() : this.message,
+  );
 
   @override
-  List<Object?> get props => [lines, customer, salesName, orderDiscount, method, amountGiven, submission, message];
+  List<Object?> get props => [
+    lines,
+    customer,
+    guestCustomerName,
+    salesName,
+    orderDiscount,
+    method,
+    amountGiven,
+    submission,
+    message,
+  ];
 }
 
 /// Layar kasir langsung (Owner).
@@ -90,7 +106,13 @@ class PosViewModel extends Notifier<PosState> {
 
   void removeLine(int index) => state = state.copyWith(lines: [...state.lines]..removeAt(index));
 
-  void setCustomer(AppUser? customer) => state = state.copyWith(customer: () => customer);
+  void setCustomer(AppUser? customer) => state = state.copyWith(customer: () => customer, guestCustomerName: '');
+
+  void setGuestCustomer(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    state = state.copyWith(customer: () => null, guestCustomerName: trimmed);
+  }
 
   void setSalesName(String name) => state = state.copyWith(salesName: name);
 
@@ -103,29 +125,43 @@ class PosViewModel extends Notifier<PosState> {
   void clearMessage() => state = state.copyWith(message: () => null);
 
   /// Baris keranjang setelah harga khusus / promo customer diterapkan.
-  List<CartLine> pricedLines() => CartRules.applyDiscounts(
-        state.lines,
-        customerId: state.customer?.uid,
-        discounts: ref.read(discountsProvider).value ?? const [],
-        now: ref.read(clockProvider)(),
-      );
+  List<CartLine> pricedLines() {
+    final products = {for (final p in ref.read(productsProvider).value ?? const <Product>[]) p.id: p};
+    return CartRules.applyDiscounts(
+      [
+        for (final line in state.lines)
+          if (products[line.productId] case final product?)
+            CartRules.reprice(line, product.forCustomer(state.customer?.uid))
+          else
+            line,
+      ],
+      customerId: state.customer?.uid,
+      discounts: ref.read(discountsProvider).value ?? const [],
+      now: ref.read(clockProvider)(),
+    );
+  }
 
   double get taxPercent => ref.read(storeSettingsProvider).value?.effectiveTax ?? 0;
 
   /// Menyimpan transaksi. Mengembalikan id nota bila sukses.
   Future<String?> checkout() async {
     state = state.copyWith(submission: const AsyncLoading());
-    final result = await AsyncValue.guard(() => ref.read(salesRepositoryProvider).createPosSale(
-          pricedLines: pricedLines(),
-          customerId: state.customer?.uid,
-          customerName: state.customerName,
-          salesName: state.salesName.trim(),
-          orderDiscount: state.orderDiscount,
-          taxPercent: taxPercent,
-          method: state.method,
-          amountGiven: state.amountGiven,
-          by: ref.read(currentUserProvider),
-        ));
+    final result = await AsyncValue.guard(() async {
+      await ref.read(productsProvider.future);
+      return ref
+          .read(salesRepositoryProvider)
+          .createPosSale(
+            pricedLines: pricedLines(),
+            customerId: state.customer?.uid,
+            customerName: state.customerName,
+            salesName: state.salesName.trim(),
+            orderDiscount: state.orderDiscount,
+            taxPercent: taxPercent,
+            method: state.method,
+            amountGiven: state.amountGiven,
+            by: ref.read(currentUserProvider),
+          );
+    });
     if (!ref.mounted) return null;
     if (result.hasError) {
       state = state.copyWith(submission: result);
@@ -140,6 +176,7 @@ final posViewModelProvider = NotifierProvider<PosViewModel, PosState>(PosViewMod
 
 /// Total yang ditampilkan di layar kasir, selalu sinkron dengan keranjang dan diskon.
 final posTotalsProvider = Provider<SaleTotals>((ref) {
+  ref.watch(productsProvider);
   final state = ref.watch(posViewModelProvider);
   ref.watch(discountsProvider);
   ref.watch(storeSettingsProvider);

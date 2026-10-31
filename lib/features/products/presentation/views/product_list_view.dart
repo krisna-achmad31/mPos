@@ -18,6 +18,8 @@ import '../../domain/services/inventory_summary.dart';
 import '../../domain/services/price_suggestion.dart';
 import '../../product_providers.dart';
 import '../viewmodels/product_view_models.dart';
+import 'delete_product_action.dart';
+import 'product_export_button.dart';
 
 class ProductListView extends ConsumerWidget {
   const ProductListView({super.key});
@@ -33,14 +35,11 @@ class ProductListView extends ConsumerWidget {
     return PageScaffold(
       title: 'Produk & stok',
       subtitle: 'Atur harga, stok, dan satuan dalam satu tempat.',
-      actions: [const _SampleProductsButton(), const _AddButton()],
+      actions: [const ProductExportButton(), const _SampleProductsButton(), const _AddButton()],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!isPhone) ...[
-            _ProductKpis(reorder: reorder),
-            const SizedBox(height: AppSpacing.xl),
-          ],
+          if (!isPhone) ...[_ProductKpis(reorder: reorder), const SizedBox(height: AppSpacing.xl)],
           SectionCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -386,7 +385,13 @@ class _ProductGrid extends StatelessWidget {
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
-          children: [for (final p in products) SizedBox(width: width, child: _ProductCard(product: p))],
+          children: [
+            for (final p in products)
+              SizedBox(
+                width: width,
+                child: _ProductCard(product: p),
+              ),
+          ],
         );
       },
     );
@@ -470,9 +475,7 @@ class _ProductTable extends ConsumerWidget {
                     !p.trackStock ? '-' : '${formatNumber(p.stock)} ${p.unit}',
                     style: TextStyle(color: p.isBundle ? context.tokens.muted : null),
                   ),
-                  p.isBundle
-                      ? const Text('-')
-                      : costCell(() => InventorySummary.valueOf(p, costs[p.id])),
+                  p.isBundle ? const Text('-') : costCell(() => InventorySummary.valueOf(p, costs[p.id])),
                   _StockIndicator(product: p),
                   _ActiveSwitch(product: p),
                 ],
@@ -558,11 +561,7 @@ class _Remarks extends StatelessWidget {
     if (packs.isEmpty) {
       return Text('Satuan (${p.unit})', style: Theme.of(context).textTheme.bodySmall);
     }
-    return Wrap(
-      spacing: 6,
-      runSpacing: 4,
-      children: [for (final pack in packs) _Badge(pack.label(p.unit))],
-    );
+    return Wrap(spacing: 6, runSpacing: 4, children: [for (final pack in packs) _Badge(pack.label(p.unit))]);
   }
 }
 
@@ -578,10 +577,7 @@ class _Badge extends StatelessWidget {
       message: label,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: tokens.primaryTint,
-          borderRadius: BorderRadius.circular(AppRadius.badge),
-        ),
+        decoration: BoxDecoration(color: tokens.primaryTint, borderRadius: BorderRadius.circular(AppRadius.badge)),
         child: Text(
           label,
           maxLines: 1,
@@ -701,13 +697,13 @@ class _RestockBanner extends ConsumerWidget {
   }
 }
 
-class _ProductCard extends StatelessWidget {
+class _ProductCard extends ConsumerWidget {
   const _ProductCard({required this.product});
 
   final Product product;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final tokens = context.tokens;
     final p = product;
@@ -755,12 +751,7 @@ class _ProductCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         spacing: AppSpacing.xs,
                         children: [
-                          Text(
-                            p.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall,
-                          ),
+                          Text(p.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.titleSmall),
                           Text(
                             [
                               if (p.sku.isNotEmpty) p.sku,
@@ -778,9 +769,11 @@ class _ProductCard extends StatelessWidget {
                         if (value == 'edit') context.go('/owner/products/${p.id}');
                         if (value == 'opname') StockOpnameDialog.show(context, p);
                         if (value == 'restock') context.go('/owner/stock-in');
+                        if (value == 'delete') deleteProduct(context, ref, p);
                       },
                       itemBuilder: (_) => [
                         const PopupMenuItem(value: 'edit', child: Text('Ubah')),
+                        const PopupMenuItem(value: 'delete', child: Text('Hapus produk')),
                         if (p.trackStock && !p.isBundle)
                           const PopupMenuItem(value: 'restock', child: Text('Restock (stok masuk)')),
                         if (p.trackStock && !p.isBundle)

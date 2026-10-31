@@ -20,7 +20,7 @@ class ProductSearchViewModel extends Notifier<String> {
   void setQuery(String query) => state = query;
 }
 
-final productSearchProvider = NotifierProvider<ProductSearchViewModel, String>(ProductSearchViewModel.new);
+final productSearchProvider = NotifierProvider.autoDispose<ProductSearchViewModel, String>(ProductSearchViewModel.new);
 
 /// Filter stok di halaman Produk Owner.
 enum StockFilter {
@@ -37,12 +37,12 @@ enum StockFilter {
   final String label;
 
   bool accepts(Product p) => switch (this) {
-        all => true,
-        safe => StockLevel.of(p) == StockLevel.safe,
-        low => StockLevel.of(p) == StockLevel.low,
-        out => StockLevel.of(p) == StockLevel.out,
-        restock => p.active && p.needsReorder,
-      };
+    all => true,
+    safe => StockLevel.of(p) == StockLevel.safe,
+    low => StockLevel.of(p) == StockLevel.low,
+    out => StockLevel.of(p) == StockLevel.out,
+    restock => p.active && p.needsReorder,
+  };
 }
 
 enum ProductTypeFilter {
@@ -105,14 +105,13 @@ class ProductFilter {
     ProductTypeFilter? type,
     ActiveFilter? status,
     ProductSort? sort,
-  }) =>
-      ProductFilter(
-        stock: stock ?? this.stock,
-        category: category != null ? category() : this.category,
-        type: type ?? this.type,
-        status: status ?? this.status,
-        sort: sort ?? this.sort,
-      );
+  }) => ProductFilter(
+    stock: stock ?? this.stock,
+    category: category != null ? category() : this.category,
+    type: type ?? this.type,
+    status: status ?? this.status,
+    sort: sort ?? this.sort,
+  );
 
   bool accepts(Product p) =>
       stock.accepts(p) &&
@@ -133,8 +132,7 @@ class ProductFilterViewModel extends Notifier<ProductFilter> {
   @override
   ProductFilter build() => const ProductFilter();
 
-  void toggleRestock() =>
-      state = state.copyWith(stock: state.restockOnly ? StockFilter.all : StockFilter.restock);
+  void toggleRestock() => state = state.copyWith(stock: state.restockOnly ? StockFilter.all : StockFilter.restock);
 
   void setStock(StockFilter stock) => state = state.copyWith(stock: stock);
 
@@ -161,8 +159,9 @@ class ProductViewModeViewModel extends Notifier<ProductViewMode> {
   void set(ProductViewMode mode) => state = mode;
 }
 
-final productViewModeProvider =
-    NotifierProvider<ProductViewModeViewModel, ProductViewMode>(ProductViewModeViewModel.new);
+final productViewModeProvider = NotifierProvider<ProductViewModeViewModel, ProductViewMode>(
+  ProductViewModeViewModel.new,
+);
 
 /// Kategori yang ada, urut abjad.
 final productCategoriesProvider = Provider<List<String>>((ref) {
@@ -176,7 +175,7 @@ final productUnitCostsProvider = Provider<Map<String, ProductCost>>(
 );
 
 /// Daftar produk setelah pencarian, filter, dan urutan.
-final filteredProductsProvider = Provider<AsyncValue<List<Product>>>((ref) {
+final filteredProductsProvider = Provider.autoDispose<AsyncValue<List<Product>>>((ref) {
   final query = ref.watch(productSearchProvider);
   final filter = ref.watch(productFilterProvider);
   final costs = ref.watch(productUnitCostsProvider);
@@ -208,7 +207,7 @@ final inventorySummaryProvider = Provider<InventorySummary?>((ref) {
 });
 
 /// Total stok & nilai untuk hasil filter saat ini.
-final filteredInventorySummaryProvider = Provider<InventorySummary?>((ref) {
+final filteredInventorySummaryProvider = Provider.autoDispose<InventorySummary?>((ref) {
   final products = ref.watch(filteredProductsProvider).value;
   if (products == null) return null;
   return InventorySummary.of(products, ref.watch(productUnitCostsProvider));
@@ -220,44 +219,61 @@ final reorderProductsProvider = Provider<AsyncValue<List<Product>>>(
 
 class ProductFormViewModel extends ActionViewModel {
   Future<bool> save(Product product, {required int buyPrice}) => run(() async {
-        if (product.name.trim().isEmpty) throw const AppException('Nama produk wajib diisi.');
-        final taken = BarcodeRules.owner(await readReady(productsProvider.future), product.barcode, excludeId: product.id);
-        if (taken != null) throw AppException(barcodeTakenMessage(taken));
-        if (product.isBundle) {
-          BundleRules.validate(product);
-          final user = ref.read(currentUserProvider);
-          await ref.read(productRepositoryProvider).saveProduct(product, buyPrice: buyPrice, userId: user.uid);
-          return;
-        }
-        if (product.sellPrice <= 0) throw const AppException('Harga jual harus lebih dari 0.');
-        if (product.wholesalePrice > 0 && product.wholesaleMinQty < 2) {
-          throw const AppException('Qty minimal grosir minimal 2.');
-        }
-        if (product.wholesalePrice >= product.sellPrice && product.wholesalePrice > 0) {
-          throw const AppException('Harga grosir harus lebih murah dari harga satuan.');
-        }
-        if (product.minStock < 0) throw const AppException('Stok minimum tidak boleh negatif.');
-        for (final pack in product.packs) {
-          if (pack.price > pack.contents * product.sellPrice) {
-            throw AppException('Harga per ${pack.name} lebih mahal dari harga satuan × isi '
-                '(${pack.contents} × ${product.sellPrice}).');
-          }
-        }
-        final sizes = product.packs.map((p) => p.contents).toList();
-        if (sizes.toSet().length != sizes.length) throw const AppException('Isi tiap kemasan harus berbeda.');
-        final user = ref.read(currentUserProvider);
-        await ref.read(productRepositoryProvider).saveProduct(product, buyPrice: buyPrice, userId: user.uid);
-      });
+    if (product.customerPrices.entries.any((e) => e.key.isEmpty || e.value <= 0)) {
+      throw const AppException('Toko dan harga khusus harus valid.');
+    }
+    if (product.name.trim().isEmpty) throw const AppException('Nama produk wajib diisi.');
+    final taken = BarcodeRules.owner(await readReady(productsProvider.future), product.barcode, excludeId: product.id);
+    if (taken != null) throw AppException(barcodeTakenMessage(taken));
+    if (product.isBundle) {
+      BundleRules.validate(product);
+      final user = ref.read(currentUserProvider);
+      await ref.read(productRepositoryProvider).saveProduct(product, buyPrice: buyPrice, userId: user.uid);
+      return;
+    }
+    if (product.sellPrice <= 0) throw const AppException('Harga jual harus lebih dari 0.');
+    if (product.wholesalePrice > 0 && product.wholesaleMinQty < 2) {
+      throw const AppException('Qty minimal grosir minimal 2.');
+    }
+    if (product.wholesalePrice >= product.sellPrice && product.wholesalePrice > 0) {
+      throw const AppException('Harga grosir harus lebih murah dari harga satuan.');
+    }
+    if (product.minStock < 0) throw const AppException('Stok minimum tidak boleh negatif.');
+    for (final pack in product.packs) {
+      if (pack.price > pack.contents * product.sellPrice) {
+        throw AppException(
+          'Harga per ${pack.name} lebih mahal dari harga satuan × isi '
+          '(${pack.contents} × ${product.sellPrice}).',
+        );
+      }
+    }
+    final sizes = product.packs.map((p) => p.contents).toList();
+    if (sizes.toSet().length != sizes.length) throw const AppException('Isi tiap kemasan harus berbeda.');
+    final user = ref.read(currentUserProvider);
+    await ref.read(productRepositoryProvider).saveProduct(product, buyPrice: buyPrice, userId: user.uid);
+  });
 
   Future<bool> setActive(Product product, bool active) =>
       run(() => ref.read(productRepositoryProvider).setActive(product.id, active));
+
+  Future<bool> deleteProduct(Product product) => run(() async {
+    if (!product.isBundle && product.stock != 0) {
+      throw const AppException('Produk hanya bisa dihapus jika stoknya 0. Sesuaikan stok lewat stock opname.');
+    }
+    final products = await ref.read(productsProvider.future);
+    final bundle = products.where((p) => p.bundleItems.any((b) => b.productId == product.id)).firstOrNull;
+    if (bundle != null) {
+      throw AppException('Produk masih dipakai di bundling "${bundle.name}". Hapus dari isi bundling terlebih dahulu.');
+    }
+    await ref.read(productRepositoryProvider).deleteProduct(product.id);
+  });
 }
 
-String barcodeTakenMessage(Product taken) => 'Barcode ${taken.barcode} sudah dipakai "${taken.name}". '
+String barcodeTakenMessage(Product taken) =>
+    'Barcode ${taken.barcode} sudah dipakai "${taken.name}". '
     'Barang yang sama (walau harga beli berbeda) ditambah lewat Stok Masuk agar HPP-nya dirata-rata.';
 
-final productFormViewModelProvider =
-    NotifierProvider<ProductFormViewModel, AsyncValue<void>>(ProductFormViewModel.new);
+final productFormViewModelProvider = NotifierProvider<ProductFormViewModel, AsyncValue<void>>(ProductFormViewModel.new);
 
 /// Memasukkan / menyinkronkan katalog contoh distributor cafe ke produk asli.
 class SampleProductsViewModel extends ActionViewModel {
@@ -267,13 +283,15 @@ class SampleProductsViewModel extends ActionViewModel {
     final ok = await run(() async {
       final user = ref.read(currentUserProvider);
       final seeds = DemoCatalog.seedProducts;
-      final created = await ref
-          .read(productRepositoryProvider)
-          .upsertCatalogProducts([for (final s in seeds) (product: s.product, buyPrice: s.buyPrice)]);
+      final created = await ref.read(productRepositoryProvider).upsertCatalogProducts([
+        for (final s in seeds) (product: s.product, buyPrice: s.buyPrice),
+      ]);
       final fresh = seeds.where((s) => created.contains(s.product.id)).toList();
       if (fresh.isNotEmpty) {
         // Stok awal hanya untuk produk yang baru dibuat.
-        await ref.read(stockRepositoryProvider).createReceipt(
+        await ref
+            .read(stockRepositoryProvider)
+            .createReceipt(
               StockReceipt(
                 id: '',
                 supplier: 'Stok awal (produk contoh)',
@@ -298,5 +316,6 @@ class SampleProductsViewModel extends ActionViewModel {
   }
 }
 
-final sampleProductsViewModelProvider =
-    NotifierProvider<SampleProductsViewModel, AsyncValue<void>>(SampleProductsViewModel.new);
+final sampleProductsViewModelProvider = NotifierProvider<SampleProductsViewModel, AsyncValue<void>>(
+  SampleProductsViewModel.new,
+);

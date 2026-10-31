@@ -31,10 +31,11 @@ class CatalogView extends ConsumerStatefulWidget {
 
 class _CatalogViewState extends ConsumerState<CatalogView> {
   String? _category;
+  String _query = '';
 
   @override
   Widget build(BuildContext context) {
-    final query = ref.watch(productSearchProvider);
+    final query = _query;
     final uid = ref.watch(currentUserProvider).uid;
     final cart = ref.watch(customerCartViewModelProvider(uid));
     final promos = ref.watch(catalogPromosProvider).value ?? const [];
@@ -58,14 +59,10 @@ class _CatalogViewState extends ConsumerState<CatalogView> {
         children: [
           TextField(
             decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Cari produk…'),
-            onChanged: ref.read(productSearchProvider.notifier).setQuery,
+            onChanged: (value) => setState(() => _query = value),
           ),
           const SizedBox(height: AppSpacing.md),
-          _CategoryChips(
-            categories: categories,
-            selected: _category,
-            onSelected: (c) => setState(() => _category = c),
-          ),
+          _CategoryChips(categories: categories, selected: _category, onSelected: (c) => setState(() => _category = c)),
           const SizedBox(height: AppSpacing.lg),
           Expanded(
             child: AsyncValueView(
@@ -94,8 +91,14 @@ class _CatalogViewState extends ConsumerState<CatalogView> {
                         ),
                   itemCount: products.length,
                   itemBuilder: (context, i) => _ProductCard(
-                    product: products[i],
-                    promoPrice: PricingService.catalogPromoPrice(products[i], promos, now, customerId: uid),
+                    product: products[i].forCustomer(uid),
+                    normalPrice: products[i].sellPrice,
+                    promoPrice: PricingService.catalogPromoPrice(
+                      products[i].forCustomer(uid),
+                      promos,
+                      now,
+                      customerId: uid,
+                    ),
                   ),
                 );
               },
@@ -128,11 +131,7 @@ class _CategoryChips extends StatelessWidget {
             onSelected: (_) => onSelected(null),
           ),
           for (final c in categories)
-            ChoiceChip(
-              label: Text(c),
-              selected: selected == c,
-              onSelected: (_) => onSelected(c),
-            ),
+            ChoiceChip(label: Text(c), selected: selected == c, onSelected: (_) => onSelected(c)),
         ],
       ),
     );
@@ -140,9 +139,10 @@ class _CategoryChips extends StatelessWidget {
 }
 
 class _ProductCard extends ConsumerWidget {
-  const _ProductCard({required this.product, required this.promoPrice});
+  const _ProductCard({required this.product, required this.normalPrice, required this.promoPrice});
 
   final Product product;
+  final int normalPrice;
   final int? promoPrice;
 
   @override
@@ -155,6 +155,8 @@ class _ProductCard extends ConsumerWidget {
     final limited = product.trackStock && product.stock <= product.minStock;
     final normal = BundleRules.normalPrice(product.bundleItems);
     final saving = product.isBundle ? normal - product.sellPrice : 0;
+    final finalPrice = promoPrice ?? product.sellPrice;
+    final referencePrice = product.isBundle && normal > normalPrice ? normal : normalPrice;
 
     return Material(
       color: theme.colorScheme.surface,
@@ -201,27 +203,19 @@ class _ProductCard extends ConsumerWidget {
                 children: [
                   Text(product.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.titleSmall),
                   Text(
-                    product.isBundle
-                        ? 'Isi: ${BundleRules.contentsLabel(product.bundleItems)}'
-                        : 'per ${product.unit}',
+                    product.isBundle ? 'Isi: ${BundleRules.contentsLabel(product.bundleItems)}' : 'per ${product.unit}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: text.bodySmall,
                   ),
-                  if (product.isBundle && promoPrice == null && saving > 0) ...[
+                  if (referencePrice > finalPrice) ...[
                     Text(
-                      formatRupiah(normal),
-                      style: text.bodySmall?.copyWith(decoration: TextDecoration.lineThrough),
+                      formatRupiah(referencePrice),
+                      style: text.bodySmall?.copyWith(color: tokens.muted, decoration: TextDecoration.lineThrough),
                     ),
-                    Text(formatRupiah(product.sellPrice), style: text.titleMedium?.copyWith(color: primary)),
-                  ] else if (promoPrice != null) ...[
-                    Text(
-                      formatRupiah(product.sellPrice),
-                      style: text.bodySmall?.copyWith(decoration: TextDecoration.lineThrough),
-                    ),
-                    Text(formatRupiah(promoPrice!), style: text.titleMedium?.copyWith(color: primary)),
+                    Text(formatRupiah(finalPrice), style: text.titleMedium?.copyWith(color: primary)),
                   ] else
-                    Text(formatRupiah(product.sellPrice), style: text.titleMedium),
+                    Text(formatRupiah(finalPrice), style: text.titleMedium),
                   if (product.hasWholesale)
                     Text(
                       'Grosir ≥${product.wholesaleMinQty}: ${formatRupiah(product.wholesalePrice)}',
