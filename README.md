@@ -3,6 +3,8 @@
 Aplikasi POS distributor untuk **Android, iOS, dan Web** berdasarkan PRD "Aplikasi POS Distributor".
 Flutter + Riverpod (state management) + arsitektur MVVM per fitur + Firebase (Auth & Cloud Firestore).
 
+Riwayat fitur dan perbaikan beserta tanggal dan developer tersedia di [CHANGELOG.md](CHANGELOG.md).
+
 ## Arsitektur
 
 ```

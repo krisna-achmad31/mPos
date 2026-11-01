@@ -14,6 +14,7 @@ import '../../domain/services/sale_calculator.dart';
 import '../../sales_providers.dart';
 import '../viewmodels/report_view_model.dart';
 import '../widgets/month_switcher.dart';
+import '../widgets/delete_invoice_button.dart';
 
 /// Filter riwayat nota.
 enum InvoiceFilter {
@@ -237,6 +238,7 @@ class _InvoiceCard extends StatelessWidget {
                     style: theme.textTheme.titleMedium?.copyWith(color: tokens.ink),
                   ),
                   const Spacer(),
+                  DeleteInvoiceButton(invoice: invoice),
                   Icon(Icons.chevron_right, size: 20, color: tokens.muted),
                 ],
               ),

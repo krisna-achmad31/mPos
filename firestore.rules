@@ -139,7 +139,7 @@ service cloud.firestore {
 
       match /payments/{id} {
         allow read: if isOwner(d) || (isCustomer(d) && resource.data.customerId == request.auth.uid);
-        allow create: if isOwner(d);
+        allow create, delete: if isOwner(d);
       }
 
       match /expenses/{id} {

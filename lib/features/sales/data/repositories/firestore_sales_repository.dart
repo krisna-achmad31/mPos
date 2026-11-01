@@ -233,13 +233,19 @@ class FirestoreSalesRepository implements SalesRepository {
     required double taxPercent,
     required PaymentMethod method,
     required int amountGiven,
+    DateTime? transactionDate,
     required AppUser by,
   }) async {
     if (pricedLines.isEmpty) throw const AppException('Keranjang masih kosong.');
     final totals = SaleCalculator.totals(pricedLines, orderDiscount: orderDiscount, taxPercent: taxPercent);
     final payment = SaleCalculator.pay(total: totals.total, method: method, amount: amountGiven);
     final invoiceRef = _invoices.doc();
-    final now = _now();
+    final actualNow = _now();
+    final day = transactionDate ?? actualNow;
+    if (DateTime(day.year, day.month, day.day).isAfter(DateTime(actualNow.year, actualNow.month, actualNow.day))) {
+      throw const AppException('Tanggal transaksi tidak boleh di masa depan.');
+    }
+    final now = DateTime(day.year, day.month, day.day, actualNow.hour, actualNow.minute, actualNow.second);
 
     await _db.runTransaction((tx) async {
       final stock = await _readStock(tx, pricedLines);
@@ -250,42 +256,117 @@ class FirestoreSalesRepository implements SalesRepository {
       for (final entry in _qtyByProduct(pricedLines).entries) {
         if (!stock.containsKey(entry.key)) continue;
         tx.update(_products.doc(entry.key), {'stock': stock[entry.key]!.qty - entry.value});
-        writeStockMovement(_store, tx,
-            productId: entry.key,
-            type: 'out',
-            qty: -entry.value,
-            refType: Collections.invoices,
-            refId: invoiceRef.id,
-            userId: by.uid);
+        writeStockMovement(
+          _store,
+          tx,
+          productId: entry.key,
+          type: 'out',
+          qty: -entry.value,
+          refType: Collections.invoices,
+          refId: invoiceRef.id,
+          userId: by.uid,
+        );
       }
-      _writeInvoice(tx, invoiceRef,
-          number: number,
-          source: InvoiceSource.pos,
-          lines: pricedLines,
-          totals: totals,
-          customerId: customerId,
-          customerName: customerName,
-          orderId: null,
-          salesName: salesName,
-          paid: payment.paid,
-          change: payment.change,
-          method: method,
-          hpp: hpp,
-          by: by);
+      _writeInvoice(
+        tx,
+        invoiceRef,
+        number: number,
+        source: InvoiceSource.pos,
+        lines: pricedLines,
+        totals: totals,
+        customerId: customerId,
+        customerName: customerName,
+        orderId: null,
+        salesName: salesName,
+        paid: payment.paid,
+        change: payment.change,
+        method: method,
+        hpp: hpp,
+        by: by,
+        transactionDate: now,
+      );
       if (payment.paid > 0) {
-        _writePayment(tx, invoiceRef.id, customerId, payment.paid, method, by);
+        _writePayment(tx, invoiceRef.id, customerId, payment.paid, method, by, transactionDate: now);
       }
       if (pricedLines.any((l) => l.priceType.name == 'manual')) {
-        writeAudit(_store, tx,
-            userId: by.uid,
-            userName: by.name,
-            action: 'manual_price',
-            entity: Collections.invoices,
-            entityId: invoiceRef.id,
-            after: SalesModels.linesToMap(pricedLines.where((l) => l.priceType.name == 'manual').toList()));
+        writeAudit(
+          _store,
+          tx,
+          userId: by.uid,
+          userName: by.name,
+          action: 'manual_price',
+          entity: Collections.invoices,
+          entityId: invoiceRef.id,
+          after: SalesModels.linesToMap(pricedLines.where((l) => l.priceType.name == 'manual').toList()),
+        );
       }
     });
     return invoiceRef.id;
+  }
+
+  @override
+  Future<void> deleteInvoice({required String invoiceId, required AppUser by}) async {
+    if (!by.isOwner) throw const AppException('Hanya owner yang boleh menghapus transaksi.');
+    final ref = _invoices.doc(invoiceId);
+    final initial = await ref.get();
+    if (!initial.exists) throw const AppException('Nota tidak ditemukan.');
+    final payments = await _payments.where('invoiceId', isEqualTo: invoiceId).get();
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(ref);
+      final data = snap.data();
+      if (data == null) throw const AppException('Nota sudah dihapus.');
+      // Pembayaran selalu memperbarui paid pada nota; cegah pembayaran tertinggal
+      // jika pelunasan terjadi setelah daftar pembayaran dibaca.
+      if (data['paid'] != initial.data()?['paid'] || data['paymentMethod'] != initial.data()?['paymentMethod']) {
+        throw const AppException('Pembayaran berubah. Muat ulang nota lalu coba lagi.');
+      }
+      final invoice = SalesModels.invoiceFromMap(invoiceId, data);
+      final orderRef = invoice.orderId == null ? null : _orders.doc(invoice.orderId);
+      final order = orderRef == null ? null : await tx.get(orderRef);
+      if (order != null && readBool(order.data()?['cafeStockSynced'])) {
+        throw const AppException('Pesanan sudah diterima dan masuk stok POS kopi. Transaksi ini tidak bisa dihapus.');
+      }
+      final stock = invoice.voided ? <String, ({int qty, String name})>{} : await _readStock(tx, invoice.lines);
+      for (final entry in _qtyByProduct(invoice.lines).entries) {
+        final current = stock[entry.key];
+        if (current == null) continue;
+        tx.update(_products.doc(entry.key), {'stock': current.qty + entry.value});
+        writeStockMovement(
+          _store,
+          tx,
+          productId: entry.key,
+          type: 'release',
+          qty: entry.value,
+          refType: Collections.invoices,
+          refId: invoiceId,
+          userId: by.uid,
+        );
+      }
+      if (orderRef != null && order != null && order.exists) {
+        tx.update(orderRef, {
+          'status': OrderStatus.cancelled.name,
+          'invoiceId': FieldValue.delete(),
+          'cancelReason': 'Transaksi dihapus owner',
+          'cancelledBy': by.uid,
+          'cancelledAt': FieldValue.serverTimestamp(),
+        });
+      }
+      for (final payment in payments.docs) {
+        tx.delete(payment.reference);
+      }
+      tx.delete(_invoiceCosts.doc(invoiceId));
+      tx.delete(ref);
+      writeAudit(
+        _store,
+        tx,
+        userId: by.uid,
+        userName: by.name,
+        action: 'delete_invoice',
+        entity: Collections.invoices,
+        entityId: invoiceId,
+        before: {'invoice': data, 'payments': payments.docs.map((p) => p.data()).toList()},
+      );
+    });
   }
 
   // ------------------------------------------------------ Nota & pembayaran
@@ -458,6 +539,7 @@ class FirestoreSalesRepository implements SalesRepository {
     required PaymentMethod? method,
     required Map<String, int> hpp,
     required AppUser by,
+    DateTime? transactionDate,
   }) {
     tx.set(ref, {
       'number': number,
@@ -475,7 +557,8 @@ class FirestoreSalesRepository implements SalesRepository {
       'voided': false,
       'createdBy': by.uid,
       'createdByName': by.name,
-      'createdAt': FieldValue.serverTimestamp(),
+      'createdAt': transactionDate == null ? FieldValue.serverTimestamp() : SalesModels.ts(transactionDate),
+      'recordedAt': FieldValue.serverTimestamp(),
     });
     // HPP disalin saat nota terbit agar laba tidak berubah bila HPP produk berubah kemudian.
     final totalCost = lines.fold<int>(0, (acc, l) => acc + BundleLines.unitCost(l, hpp) * l.qty);
@@ -483,7 +566,8 @@ class FirestoreSalesRepository implements SalesRepository {
       'totalCost': totalCost,
       'lines': {for (final l in lines) l.productId: BundleLines.unitCost(l, hpp)},
       'voided': false,
-      'createdAt': FieldValue.serverTimestamp(),
+      'createdAt': transactionDate == null ? FieldValue.serverTimestamp() : SalesModels.ts(transactionDate),
+      'recordedAt': FieldValue.serverTimestamp(),
     });
   }
 
@@ -495,6 +579,7 @@ class FirestoreSalesRepository implements SalesRepository {
     PaymentMethod method,
     AppUser by, {
     bool reversal = false,
+    DateTime? transactionDate,
   }) {
     tx.set(_payments.doc(), {
       if (reversal) 'reversal': true,
@@ -503,7 +588,7 @@ class FirestoreSalesRepository implements SalesRepository {
       'amount': amount,
       'method': method.name,
       'byName': by.name,
-      'at': FieldValue.serverTimestamp(),
+      'at': transactionDate == null ? FieldValue.serverTimestamp() : SalesModels.ts(transactionDate),
     });
   }
 }

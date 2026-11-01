@@ -42,10 +42,13 @@ abstract interface class SalesRepository {
     required double taxPercent,
     required PaymentMethod method,
     required int amountGiven,
+    DateTime? transactionDate,
     required AppUser by,
   });
 
   // ---- Nota & pembayaran ----
+  Future<void> deleteInvoice({required String invoiceId, required AppUser by});
+
   Stream<List<Invoice>> watchInvoices({String? customerId, DateTime? from, DateTime? to});
 
   Stream<Invoice?> watchInvoice(String id);

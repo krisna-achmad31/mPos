@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/utils/money.dart';
+import '../../../../core/utils/dates.dart';
 import '../../../../core/widgets/app_layout.dart';
 import '../../../../core/widgets/empty_state.dart';
 import '../../../../core/widgets/feedback.dart';
@@ -162,6 +163,22 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          OutlinedButton.icon(
+            icon: const Icon(Icons.calendar_today_outlined),
+            label: Text('Tanggal transaksi: ${formatDate(state.transactionDate ?? DateTime.now())}'),
+            onPressed: state.submission.isLoading ? null : () async {
+              final today = DateUtils.dateOnly(DateTime.now());
+              final selected = await showDatePicker(
+                context: context,
+                initialDate: state.transactionDate ?? today,
+                firstDate: DateTime(2000),
+                lastDate: today,
+                helpText: 'Pilih tanggal transaksi',
+              );
+              if (selected != null && mounted) vm.setTransactionDate(selected);
+            },
+          ),
+          const SizedBox(height: AppSpacing.md),
           ProductPicker(
             key: ValueKey(_pickerKey),
             label: 'Scan barcode / cari produk',

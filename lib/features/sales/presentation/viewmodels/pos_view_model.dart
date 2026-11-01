@@ -19,6 +19,7 @@ class PosState extends Equatable {
     this.customer,
     this.guestCustomerName = '',
     this.salesName = '',
+    this.transactionDate,
     this.orderDiscount = const OrderDiscount.none(),
     this.method = PaymentMethod.cash,
     this.amountGiven = 0,
@@ -34,6 +35,7 @@ class PosState extends Equatable {
   /// Nama pembeli langsung / WhatsApp yang tidak memiliki akun.
   final String guestCustomerName;
   final String salesName;
+  final DateTime? transactionDate;
   final OrderDiscount orderDiscount;
   final PaymentMethod method;
   final int amountGiven;
@@ -49,6 +51,7 @@ class PosState extends Equatable {
     AppUser? Function()? customer,
     String? guestCustomerName,
     String? salesName,
+    DateTime? transactionDate,
     OrderDiscount? orderDiscount,
     PaymentMethod? method,
     int? amountGiven,
@@ -59,6 +62,7 @@ class PosState extends Equatable {
     customer: customer != null ? customer() : this.customer,
     guestCustomerName: guestCustomerName ?? this.guestCustomerName,
     salesName: salesName ?? this.salesName,
+    transactionDate: transactionDate ?? this.transactionDate,
     orderDiscount: orderDiscount ?? this.orderDiscount,
     method: method ?? this.method,
     amountGiven: amountGiven ?? this.amountGiven,
@@ -72,6 +76,7 @@ class PosState extends Equatable {
     customer,
     guestCustomerName,
     salesName,
+    transactionDate,
     orderDiscount,
     method,
     amountGiven,
@@ -116,6 +121,8 @@ class PosViewModel extends Notifier<PosState> {
 
   void setSalesName(String name) => state = state.copyWith(salesName: name);
 
+  void setTransactionDate(DateTime date) => state = state.copyWith(transactionDate: date);
+
   void setOrderDiscount(OrderDiscount discount) => state = state.copyWith(orderDiscount: discount);
 
   void setMethod(PaymentMethod method) => state = state.copyWith(method: method);
@@ -159,6 +166,7 @@ class PosViewModel extends Notifier<PosState> {
             taxPercent: taxPercent,
             method: state.method,
             amountGiven: state.amountGiven,
+            transactionDate: state.transactionDate,
             by: ref.read(currentUserProvider),
           );
     });

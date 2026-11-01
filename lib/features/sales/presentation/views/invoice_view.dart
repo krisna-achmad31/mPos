@@ -18,6 +18,7 @@ import '../../domain/services/sale_calculator.dart';
 import '../../sales_providers.dart';
 import '../viewmodels/order_view_models.dart';
 import '../widgets/line_text.dart';
+import '../widgets/delete_invoice_button.dart';
 import '../widgets/sales_badges.dart';
 import '../widgets/totals_table.dart';
 import 'invoice_print_view.dart';
@@ -38,6 +39,8 @@ class InvoiceView extends ConsumerWidget {
       title: invoice == null ? 'Nota' : 'Nota ${invoice.number}',
       breadcrumb: '/  Riwayat nota / Detail',
       actions: [
+        if (invoice != null)
+          DeleteInvoiceButton(invoice: invoice, onDeleted: () => context.go('$base/invoices')),
         if (invoice != null)
           OutlinedButton.icon(
             onPressed: () => Navigator.of(context).push(

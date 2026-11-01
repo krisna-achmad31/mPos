@@ -21,6 +21,7 @@ import 'package:mpos/features/settings/settings_providers.dart';
 
 class _SalesRepository extends Mock implements SalesRepository {
   Invoice? saved;
+  DateTime? savedDate;
 
   @override
   Future<String> createPosSale({
@@ -32,8 +33,10 @@ class _SalesRepository extends Mock implements SalesRepository {
     required double taxPercent,
     required PaymentMethod method,
     required int amountGiven,
+    DateTime? transactionDate,
     required AppUser by,
   }) async {
+    savedDate = transactionDate;
     saved = Invoice(
       id: 'i1',
       number: 'INV-1',
@@ -127,9 +130,12 @@ void main() {
     await tester.pump();
     final vm = container.read(posViewModelProvider.notifier);
     vm.addProduct(product);
+    vm.setTransactionDate(DateTime(2026, 9, 15));
     vm.setGuestCustomer('Bu Sari WA');
     vm.setMethod(PaymentMethod.transfer);
     expect(await vm.checkout(), 'i1');
+    expect(repository.savedDate, DateTime(2026, 9, 15));
+    expect(container.read(posViewModelProvider).transactionDate, isNull);
     expect(repository.saved!.customerId, isNull);
     expect(repository.saved!.customerName, 'Bu Sari WA');
     final rows = SalesExport.rows([repository.saved!], unitCost: (_, _) => 0);
