@@ -141,6 +141,75 @@ class FirestoreStockRepository implements StockRepository {
   }
 
   @override
+  Future<void> deleteReceipt({required StockReceipt receipt, required AppUser by}) async {
+    if (!by.isOwner) throw const AppException('Hanya owner yang boleh menghapus stok masuk.');
+    final receiptRef = _receipts.doc(receipt.id);
+    await _db.runTransaction((tx) async {
+      final snap = await tx.get(receiptRef);
+      final data = snap.data();
+      if (data == null) throw const AppException('Dokumen sudah dihapus.');
+      if (data['status'] == 'pending_change') {
+        throw const AppException('Dokumen ini masih punya pengajuan koreksi. Putuskan pengajuannya dulu.');
+      }
+      final items = readMapList(data['items']).map(StockModels.itemFromMap).toList();
+
+      final ids = items.map((i) => i.productId).toSet();
+      final stock = <String, int>{};
+      final hpp = <String, int>{};
+      final names = <String, String>{};
+      for (final id in ids) {
+        final product = await tx.get(_products.doc(id));
+        // Produk yang sudah dihapus tidak punya stok untuk ditarik.
+        if (!product.exists) continue;
+        final cost = await tx.get(_costs.doc(id));
+        stock[id] = readInt(product.data()!['stock']);
+        hpp[id] = readInt(cost.data()?['hpp']);
+        names[id] = readString(product.data()!['name']);
+      }
+
+      // Dibalik berurutan dari baris terakhir, kebalikan urutan saat disimpan.
+      for (final item in items.reversed) {
+        final current = stock[item.productId];
+        if (current == null) continue;
+        hpp[item.productId] = StockCalculator.hppAfterRemoval(
+          currentStock: current,
+          currentHpp: hpp[item.productId]!,
+          removedQty: item.qty,
+          removedPrice: item.buyPrice,
+        );
+        stock[item.productId] = current - item.qty;
+      }
+      for (final entry in stock.entries) {
+        if (entry.value < 0) {
+          throw AppException('Stok ${names[entry.key]} akan minus (${entry.value}). Barang sudah terjual sebagian.');
+        }
+      }
+
+      // Semua baca selesai; mulai menulis.
+      for (final id in stock.keys) {
+        final removed = items.where((i) => i.productId == id).fold<int>(0, (acc, i) => acc + i.qty);
+        tx.update(_products.doc(id), {'stock': stock[id], 'updatedAt': FieldValue.serverTimestamp()});
+        tx.set(_costs.doc(id), {'hpp': hpp[id]}, SetOptions(merge: true));
+        writeStockMovement(_store, tx,
+            productId: id,
+            type: 'adjust',
+            qty: -removed,
+            refType: Collections.stockReceipts,
+            refId: receipt.id,
+            userId: by.uid);
+      }
+      tx.delete(receiptRef);
+      writeAudit(_store, tx,
+          userId: by.uid,
+          userName: by.name,
+          action: 'delete',
+          entity: Collections.stockReceipts,
+          entityId: receipt.id,
+          before: data);
+    });
+  }
+
+  @override
   Stream<List<ChangeRequest>> watchChangeRequests({String? requestedBy}) {
     Query<Map<String, dynamic>> query = _requests;
     if (requestedBy != null) query = query.where('requestedBy', isEqualTo: requestedBy);

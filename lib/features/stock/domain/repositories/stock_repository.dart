@@ -24,6 +24,9 @@ abstract interface class StockRepository {
     required AppUser by,
   });
 
+  /// Owner menghapus dokumen: stok ditarik kembali dan HPP rata-rata dihitung ulang.
+  Future<void> deleteReceipt({required StockReceipt receipt, required AppUser by});
+
   Stream<List<ChangeRequest>> watchChangeRequests({String? requestedBy});
 
   Future<void> decideChange({

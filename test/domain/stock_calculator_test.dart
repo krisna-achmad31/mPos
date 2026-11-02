@@ -3,6 +3,24 @@ import 'package:mpos/features/stock/domain/entities/stock_receipt.dart';
 import 'package:mpos/features/stock/domain/services/stock_calculator.dart';
 
 void main() {
+  test('HPP dihitung ulang saat stok masuk dihapus', () {
+    // Kebalikan contoh averageCost: 10 @10.000 + 10 @12.000 = 20 @11.000.
+    expect(
+      StockCalculator.hppAfterRemoval(currentStock: 20, currentHpp: 11000, removedQty: 10, removedPrice: 12000),
+      10000,
+    );
+    // Stok habis setelah ditarik: HPP terakhir dipertahankan.
+    expect(
+      StockCalculator.hppAfterRemoval(currentStock: 10, currentHpp: 11000, removedQty: 10, removedPrice: 12000),
+      11000,
+    );
+    // Nilai sisa tidak masuk akal (barang mahal sudah banyak terjual): HPP dipertahankan.
+    expect(
+      StockCalculator.hppAfterRemoval(currentStock: 12, currentHpp: 1000, removedQty: 10, removedPrice: 50000),
+      1000,
+    );
+  });
+
   test('HPP rata-rata tertimbang', () {
     expect(
       StockCalculator.averageCost(currentStock: 10, currentHpp: 10000, incomingQty: 10, incomingPrice: 12000),

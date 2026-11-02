@@ -16,6 +16,22 @@ abstract final class StockCalculator {
     return ((base * currentHpp + incomingQty * incomingPrice) / totalQty).round();
   }
 
+  /// HPP setelah barang yang dulu masuk seharga [removedPrice] ditarik kembali
+  /// (kebalikan [averageCost]). Bila sisa stok habis atau hasilnya tidak masuk
+  /// akal (barang sudah banyak terjual), HPP saat ini dipertahankan.
+  static int hppAfterRemoval({
+    required int currentStock,
+    required int currentHpp,
+    required int removedQty,
+    required int removedPrice,
+  }) {
+    final remaining = currentStock - removedQty;
+    if (remaining <= 0) return currentHpp;
+    final value = currentStock * currentHpp - removedQty * removedPrice;
+    if (value <= 0) return currentHpp;
+    return (value / remaining).round();
+  }
+
   /// HPP [productId] setelah semua [items] dokumen ini masuk, dihitung berurutan seperti saat disimpan.
   static int projectedHpp({
     required String productId,

@@ -21,6 +21,7 @@ import '../../domain/services/stock_calculator.dart';
 import '../../domain/entities/stock_receipt.dart';
 import '../../stock_providers.dart';
 import '../viewmodels/stock_view_models.dart';
+import 'delete_receipt_button.dart';
 import 'receipt_edit_dialog.dart';
 
 class StockInView extends StatelessWidget {
@@ -515,6 +516,7 @@ class _ReceiptHistory extends ConsumerWidget {
               onPressed: () => _edit(context, ref, r),
               child: Text(isOwner ? 'Ubah' : 'Ajukan koreksi'),
             ),
+          if (!r.isLocked) DeleteReceiptButton(receipt: r),
         ],
       ),
       child: AppDataTable(
