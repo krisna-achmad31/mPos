@@ -160,6 +160,7 @@ class _CartPanelState extends ConsumerState<_CartPanel> {
       title: 'Keranjang',
       subtitle: 'Pesanan saat ini',
       trailing: StatusBadge('${state.lines.length} item', tone: BadgeTone.neutral),
+      expand: !widget.shrinkWrap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

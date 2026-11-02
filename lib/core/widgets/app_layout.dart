@@ -198,12 +198,17 @@ class SectionCard extends StatelessWidget {
     this.spacing = AppSpacing.md,
     this.bottomMargin = AppSpacing.md,
     this.highlight,
+    this.expand = false,
   });
 
   final String? title;
   final String? subtitle;
   final Widget? trailing;
   final Widget child;
+
+  /// `true` bila kartu diberi tinggi terbatas dan [child] harus mengisi sisa
+  /// tingginya (mis. daftar yang memakai `Expanded` di dalamnya).
+  final bool expand;
   final EdgeInsets padding;
   final double spacing;
   final double bottomMargin;
@@ -260,7 +265,7 @@ class SectionCard extends StatelessWidget {
                   ],
                 ),
               if (title != null) SizedBox(height: spacing),
-              child,
+              if (expand) Expanded(child: child) else child,
             ],
           ),
         ),
