@@ -2,6 +2,16 @@
 
 Catatan perubahan terbaru ditulis paling atas. Setiap entri mencantumkan tanggal, developer, dan daftar fitur/perbaikan. Riwayat sebelum 1 November 2026 diringkas dari commit Git; nama developer mengikuti author commit.
 
+## 2026-11-02
+
+Developer: Achmad Yukrisna (dibantu Claude)
+
+- Perbaikan: daftar barang di keranjang Kasir tidak tampil di layar lebar (web desktop); `SectionCard` kini punya opsi `expand`.
+- Hapus dokumen stok masuk khusus owner dari tab Riwayat: stok ditarik kembali, HPP rata-rata dihitung ulang, ditolak bila stok akan minus atau dokumen masih menunggu ACC koreksi.
+- Menu **Backup data** (owner): backup harian otomatis seluruh data distributor mulai 00.00 WIB saat aplikasi owner terbuka, disimpan 4 hari terakhir di perangkat (folder aplikasi / IndexedDB browser) dan Google Drive owner.
+- Load backup: ganti semua data atau sebagian (per kelompok data), dengan peringatan dan backup otomatis "sebelum load" agar bisa dibatalkan; backup juga bisa diunduh dan di-load dari file.
+- Rules produksi: owner boleh menghapus stok masuk dan menulis ulang semua data distributornya (dibutuhkan saat load backup).
+
 ## 2026-11-01
 
 Developer: Achmad Yukrisna (dibantu Codex)

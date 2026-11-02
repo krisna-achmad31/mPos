@@ -35,6 +35,7 @@ import '../../features/sales/presentation/views/order_detail_view.dart';
 import '../../features/sales/presentation/views/orders_view.dart';
 import '../../features/sales/presentation/views/pos_view.dart';
 import '../../features/settings/presentation/settings_view.dart';
+import '../../features/backup/presentation/views/backup_view.dart';
 import '../../features/stock/presentation/views/change_requests_view.dart';
 import '../../features/stock/presentation/views/stock_in_view.dart';
 import 'app_shell.dart';
@@ -116,6 +117,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         page('/owner/users', (_) => const UsersView()),
         page('/owner/premium', (_) => const PremiumCodesView()),
         page('/owner/settings', (_) => const SettingsView()),
+        page('/owner/backup', (_) => const BackupView()),
       ]),
       shell([
         page('/spv', (_) => const StockInView()),

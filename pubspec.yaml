@@ -52,6 +52,10 @@ dependencies:
   print_bluetooth_thermal: ^1.2.5
   # Menyimpan pilihan tampilan (Terang / Gelap / Ikuti sistem) di perangkat.
   shared_preferences: ^2.5.3
+  google_sign_in: ^7.2.0
+  http: ^1.6.0
+  path_provider: ^2.1.6
+  web: ^1.1.2
 
 dev_dependencies:
   flutter_test:

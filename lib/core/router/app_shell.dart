@@ -7,6 +7,7 @@ import '../../features/cafe/cafe_providers.dart';
 import '../../features/cafe/presentation/views/cafe_locked_view.dart';
 import '../../features/auth/domain/entities/user_role.dart';
 import '../../features/auth/presentation/viewmodels/auth_view_model.dart';
+import '../../features/backup/presentation/viewmodels/backup_view_model.dart';
 import '../config/app_config.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/appearance_picker.dart';
@@ -48,6 +49,7 @@ const ownerNavSections = [
     NavItem('Pengguna', Icons.group_outlined, '/owner/users'),
     NavItem('Premium POS Kopi', Icons.workspace_premium_outlined, '/owner/premium'),
     NavItem('Pengaturan', Icons.settings_outlined, '/owner/settings'),
+    NavItem('Backup data', Icons.backup_outlined, '/owner/backup'),
   ]),
 ];
 
@@ -192,6 +194,8 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
+    // Backup harian berjalan selama aplikasi Owner terbuka.
+    if (user.isOwner) ref.watch(autoBackupProvider);
     final sections = sectionsFor(user.role);
     final items = navFor(user.role);
     final device = context.deviceClass;

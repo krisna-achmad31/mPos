@@ -76,6 +76,7 @@ service cloud.firestore {
       match /stock_receipts/{id} {
         allow read: if isOwner(d) || (isSpv(d) && resource.data.createdBy == request.auth.uid);
         allow create: if (isOwner(d) || isSpv(d)) && request.resource.data.createdBy == request.auth.uid;
+        allow delete: if isOwner(d);
         allow update: if isOwner(d)
           || (isSpv(d) && resource.data.createdBy == request.auth.uid
               && onlyChanges(['status']) && request.resource.data.status == 'pending_change');
@@ -176,6 +177,15 @@ service cloud.firestore {
       match /audit_logs/{id} {
         allow read: if isOwner(d);
         allow create: if member(d) && request.resource.data.userId == request.auth.uid;
+      }
+
+      // Load backup (menu Backup data): Owner boleh menulis ulang / menghapus semua data distributornya,
+      // termasuk log audit dan mutasi stok yang biasanya hanya bisa ditambah.
+      match /{collection}/{id} {
+        allow write: if isOwner(d);
+      }
+      match /premium_codes/{code}/redemptions/{cafeId} {
+        allow write: if isOwner(d);
       }
     }
 

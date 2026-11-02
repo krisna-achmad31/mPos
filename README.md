@@ -89,6 +89,35 @@ Diskon dihitung saat Owner memproses pesanan, lalu muncul di invoice sebagai "Di
 4. Owner pertama: daftar lewat tombol "Daftar sebagai pelanggan", lalu di Firestore Console ubah
    `users/{uid}.role` menjadi `owner`. Setelah itu Owner bisa mengubah role akun lain (mis. SPV) dari menu Pengguna.
 
+## Backup data
+
+Menu **Backup data** (khusus Owner) membuat backup seluruh data distributor (`distributors/{id}` beserta semua
+subkoleksinya + akun `users` distributor itu) sebagai file `mpos-<distributor>-harian-<yyyyMMdd-HHmmss>.json.gz`.
+
+- **Otomatis**: tanpa server (paket Spark). Saat aplikasi Owner terbuka, dicek tiap 10 menit; bila hari ini (WIB, mulai
+  00.00) belum ada backup harian di perangkat itu, backup dibuat. Aplikasi yang tidak dibuka seharian = tidak ada backup hari itu.
+- **Disimpan** 4 hari terakhir (hari ini + 3 hari ke belakang) + 2 backup "sebelum load", di perangkat
+  (Android/iOS: folder dokumen aplikasi; web: IndexedDB browser) dan di folder `mPOS Backup` Google Drive owner.
+- **Load**: ganti semua atau sebagian (kelompok di `lib/features/backup/domain/backup_groups.dart`). Kondisi sekarang selalu
+  di-backup dulu. Bisa juga dari file `.json.gz` yang diunduh.
+- Satu backup membaca semua dokumen distributor (kuota gratis Firestore: 50.000 baca/hari).
+
+### Mengaktifkan Google Drive (sekali)
+
+1. Google Cloud Console (project yang sama dengan Firebase) → **APIs & Services → Library** → aktifkan **Google Drive API**.
+2. **OAuth consent screen**: isi nama aplikasi & email, tambahkan scope `.../auth/drive.file` (non-sensitif, tanpa verifikasi).
+   Selama status *Testing*, tambahkan email Google owner sebagai *Test user*, atau *Publish app*.
+3. **Credentials → Create OAuth client ID**:
+   - *Web application*: Authorized JavaScript origins = domain hosting (mis. `https://<project>.web.app`) dan
+     `http://localhost:8098` untuk uji lokal. Salin Client ID ke `AppConfig.googleWebClientId`.
+   - *Android*: package `com.mpos.mpos` + SHA-1 keystore rilis (`keytool -list -v -keystore ...`).
+   - *iOS*: bundle ID aplikasi; salin Client ID ke `AppConfig.googleIosClientId` dan tambahkan *reversed client ID*
+     sebagai URL scheme di `ios/Runner/Info.plist`.
+4. Set `AppConfig.googleDriveEnabled = true`, build & deploy ulang.
+
+Di web, izin Google Drive hanya berlaku ±1 jam selama tab terbuka; backup otomatis yang dibuat tanpa izin tetap tersimpan
+lokal dan tombol **Upload ke Google Drive** menyusulkannya.
+
 ## Menjalankan
 
 ```bash
