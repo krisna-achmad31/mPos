@@ -90,7 +90,8 @@ class BackupView extends ConsumerWidget {
         children: [
           SectionCard(
             title: 'Backup otomatis',
-            subtitle: 'Setiap hari mulai pukul 00.00 WIB, saat aplikasi Owner terbuka. '
+            subtitle:
+                'Setiap hari mulai pukul 00.00 WIB, saat aplikasi Owner terbuka. '
                 'Disimpan ${BackupPolicy.keepDaily} hari terakhir (hari ini + ${BackupPolicy.keepDaily - 1} hari ke belakang).',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -120,32 +121,57 @@ class BackupView extends ConsumerWidget {
                     ),
                   ],
                 ),
-                if (busy) const LinearProgressIndicator(),
+                if (busy) _BusyNote(label: vm.busyLabel),
               ],
             ),
           ),
           SectionCard(
             title: 'Daftar backup',
             subtitle: 'Pilih Load untuk mengembalikan data. Kondisi sekarang selalu di-backup dulu sebelum load.',
-            child: AsyncValueView(
-              value: ref.watch(backupListProvider),
-              data: (result) => result.entries.isEmpty
-                  ? const EmptyState(icon: Icons.history, message: 'Belum ada backup. Tekan "Backup sekarang".')
-                  : Column(
-                      children: [
-                        for (final entry in result.entries)
-                          _BackupRow(
-                            entry: entry,
-                            busy: busy,
-                            onLoad: () => _loadEntry(context, ref, entry),
-                            onDownload: () => _download(context, ref, entry),
-                          ),
-                      ],
-                    ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (busy) _BusyNote(label: vm.busyLabel),
+                AsyncValueView(
+                  value: ref.watch(backupListProvider),
+                  data: (result) => result.entries.isEmpty
+                      ? const EmptyState(icon: Icons.history, message: 'Belum ada backup. Tekan "Backup sekarang".')
+                      : Column(
+                          children: [
+                            for (final entry in result.entries)
+                              _BackupRow(
+                                entry: entry,
+                                busy: busy,
+                                onLoad: () => _loadEntry(context, ref, entry),
+                                onDownload: () => _download(context, ref, entry),
+                              ),
+                          ],
+                        ),
+                ),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Penjelasan kenapa tombol sedang nonaktif.
+class _BusyNote extends StatelessWidget {
+  const _BusyNote({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: AppSpacing.xs,
+      children: [
+        const LinearProgressIndicator(),
+        Text('$label Tombol aktif lagi setelah selesai.', style: Theme.of(context).textTheme.bodySmall),
+      ],
     );
   }
 }
@@ -161,13 +187,15 @@ class _AutoStatus extends StatelessWidget {
     final text = state.running
         ? 'Memeriksa / membuat backup hari ini…'
         : state.error != null
-            ? 'Backup otomatis gagal: ${state.error}'
-            : last != null
-                ? 'Backup otomatis dibuat ${formatDateTime(last.info.createdAt)} WIB.'
-                : 'Backup hari ini akan dibuat otomatis bila belum ada di perangkat ini.';
+        ? 'Backup otomatis gagal: ${state.error}'
+        : last != null
+        ? 'Backup otomatis dibuat ${formatDateTime(last.info.createdAt)} WIB.'
+        : 'Backup hari ini akan dibuat otomatis bila belum ada di perangkat ini.';
     return Text(
       text,
-      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: state.error != null ? context.tokens.danger : null),
+      style: Theme.of(
+        context,
+      ).textTheme.bodyMedium?.copyWith(color: state.error != null ? context.tokens.danger : null),
     );
   }
 }
@@ -182,9 +210,9 @@ class _DriveStatusLine extends StatelessWidget {
     return Text(
       configured
           ? 'Google Drive: file disimpan di folder "mPOS Backup". Di versi web, izin Google Drive berlaku ±1 jam; '
-              'bila backup otomatis belum terupload, tekan "Upload ke Google Drive".'
+                'bila backup otomatis belum terupload, tekan "Upload ke Google Drive".'
           : 'Google Drive belum diaktifkan untuk aplikasi ini, jadi backup hanya disimpan di perangkat ini. '
-              'Unduh file backup secara berkala sebagai cadangan.',
+                'Unduh file backup secara berkala sebagai cadangan.',
       style: Theme.of(context).textTheme.bodySmall,
     );
   }

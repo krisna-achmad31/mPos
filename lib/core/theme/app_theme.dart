@@ -122,7 +122,7 @@ abstract final class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: tokens.ink,
-        contentTextStyle: _style(13, FontWeight.w500, Colors.white),
+        contentTextStyle: _style(13, FontWeight.w500, tokens.canvas),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.control)),
       ),
       tabBarTheme: TabBarThemeData(
@@ -176,7 +176,7 @@ abstract final class AppTheme {
       progressIndicatorTheme: ProgressIndicatorThemeData(color: scheme.primary, linearMinHeight: 3),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(color: tokens.ink, borderRadius: BorderRadius.circular(AppRadius.badge)),
-        textStyle: _style(11.5, FontWeight.w500, Colors.white),
+        textStyle: _style(11.5, FontWeight.w500, tokens.canvas),
       ),
       popupMenuTheme: PopupMenuThemeData(
         color: scheme.surface,

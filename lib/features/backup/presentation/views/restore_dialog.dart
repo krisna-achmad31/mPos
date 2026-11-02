@@ -12,8 +12,10 @@ class RestoreDialog extends StatefulWidget {
 
   final BackupSummary summary;
 
-  static Future<Set<BackupGroup>?> show(BuildContext context, BackupSummary summary) =>
-      showDialog<Set<BackupGroup>>(context: context, builder: (_) => RestoreDialog(summary: summary));
+  static Future<Set<BackupGroup>?> show(BuildContext context, BackupSummary summary) => showDialog<Set<BackupGroup>>(
+    context: context,
+    builder: (_) => RestoreDialog(summary: summary),
+  );
 
   @override
   State<RestoreDialog> createState() => _RestoreDialogState();

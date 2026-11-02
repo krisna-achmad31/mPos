@@ -57,38 +57,51 @@ final backupListProvider = FutureProvider.autoDispose((ref) => ref.watch(backupS
 class BackupActionsViewModel extends ActionViewModel {
   String? lastMessage;
 
-  Future<bool> backupNow() => run(() async {
-        final r = await ref.read(backupServiceProvider).backupNow(interactiveDrive: true);
-        lastMessage = 'Backup tersimpan di perangkat ini${_driveText(r.drive, r.driveError)}';
-        ref.invalidate(backupListProvider);
-      });
+  /// Keterangan proses yang sedang berjalan, ditampilkan selama tombol nonaktif.
+  String busyLabel = '';
 
-  Future<bool> syncToDrive() => run(() async {
-        final (status, error) = await ref.read(backupServiceProvider).syncToDrive();
-        if (status == DriveStatus.failed) throw AppException(error ?? 'Upload ke Google Drive gagal.');
-        lastMessage = 'Backup di perangkat ini sudah ada di Google Drive';
-        ref.invalidate(backupListProvider);
-      });
+  Future<bool> _run(String label, Future<void> Function() action) {
+    busyLabel = label;
+    return run(action);
+  }
+
+  Future<bool> backupNow() => _run('Membuat backup seluruh data…', () async {
+    final r = await ref.read(backupServiceProvider).backupNow(interactiveDrive: true);
+    lastMessage = 'Backup tersimpan di perangkat ini${_driveText(r.drive, r.driveError)}';
+    ref.invalidate(backupListProvider);
+  });
+
+  Future<bool> syncToDrive() => _run('Mengupload backup ke Google Drive…', () async {
+    final (status, error) = await ref.read(backupServiceProvider).syncToDrive();
+    if (status == DriveStatus.failed) throw AppException(error ?? 'Upload ke Google Drive gagal.');
+    lastMessage = 'Backup di perangkat ini sudah ada di Google Drive';
+    ref.invalidate(backupListProvider);
+  });
 
   Future<Uint8List?> read(BackupEntry entry) async {
     Uint8List? bytes;
-    final ok = await run(() async => bytes = await ref.read(backupServiceProvider).read(entry));
+    final ok = await _run(
+      'Membuka file backup…',
+      () async => bytes = await ref.read(backupServiceProvider).read(entry),
+    );
     return ok ? bytes : null;
   }
 
-  Future<bool> restore(Uint8List bytes, Set<BackupGroup> groups) => run(() async {
+  Future<bool> restore(Uint8List bytes, Set<BackupGroup> groups) =>
+      _run('Mem-backup kondisi sekarang lalu me-load backup… Jangan tutup aplikasi.', () async {
         final safety = await ref.read(backupServiceProvider).restore(bytes, groups);
-        lastMessage = 'Backup berhasil di-load. Kondisi sebelum load disimpan sebagai backup '
+        lastMessage =
+            'Backup berhasil di-load. Kondisi sebelum load disimpan sebagai backup '
             '"sebelum load"${_driveText(safety.drive, safety.driveError)}';
         ref.invalidate(backupListProvider);
       });
 
   static String _driveText(DriveStatus status, String? error) => switch (status) {
-        DriveStatus.uploaded => ' dan Google Drive.',
-        DriveStatus.notConfigured => '.',
-        DriveStatus.needsConnect => '. Belum terupload ke Google Drive.',
-        DriveStatus.failed => '. Upload ke Google Drive gagal: $error',
-      };
+    DriveStatus.uploaded => ' dan Google Drive.',
+    DriveStatus.notConfigured => '.',
+    DriveStatus.needsConnect => '. Belum terupload ke Google Drive.',
+    DriveStatus.failed => '. Upload ke Google Drive gagal: $error',
+  };
 }
 
 final backupActionsProvider = NotifierProvider<BackupActionsViewModel, AsyncValue<void>>(BackupActionsViewModel.new);
